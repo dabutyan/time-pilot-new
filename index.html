@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TIME PILOT — 大会・コンペ準備マネージャー</title>
+<style>
+:root{
+  --bg:#f5f6fa; --card:#fff; --ink:#1c2333; --sub:#6b7280; --line:#e5e7eb;
+  --accent:#4f6df5; --accent-soft:#eef1fe; --ok:#16a34a; --ok-soft:#e8f7ee;
+  --warn:#d97706; --warn-soft:#fdf3e3; --bad:#dc2626; --bad-soft:#fdecec;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:50;flex-wrap:wrap}
+header h1{font-size:16px;font-weight:800}
+header h1 span{color:var(--accent)}
+#ev-select{font-weight:700;min-width:160px}
+nav{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+nav button{border:none;background:none;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--sub);font-weight:600}
+nav button.active{background:var(--accent-soft);color:var(--accent)}
+main{max-width:1000px;margin:0 auto;padding:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.card h2{font-size:14px;font-weight:700;margin-bottom:12px}
+.muted{color:var(--sub);font-size:12px}
+input,select,textarea,button{font-family:inherit;font-size:13px}
+input,select,textarea{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.btn{border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;background:var(--accent);color:#fff}
+.btn.ghost{background:var(--accent-soft);color:var(--accent)}
+.btn.small{padding:4px 10px;font-size:12px}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11px;color:var(--sub);font-weight:600}
+.view{display:none}.view.active{display:block}
+.empty{color:var(--sub);font-size:13px;padding:14px 4px;text-align:center}
+/* home */
+.hero{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
+.count{background:linear-gradient(135deg,#4f6df5,#7b5df5);color:#fff;border-radius:12px;padding:18px 22px;min-width:170px}
+.count .d{font-size:38px;font-weight:800;line-height:1.1}
+.count .l{font-size:12px;opacity:.85}
+.pace{border-radius:12px;padding:14px 18px;flex:1;min-width:220px;font-size:13px;line-height:1.8}
+.pace.ok{background:var(--ok-soft)} .pace.warn{background:var(--warn-soft)} .pace.bad{background:var(--bad-soft)}
+.pace b.v{font-size:20px}
+.pbarwrap{background:#eceef4;border-radius:99px;height:14px;overflow:hidden;margin:6px 0}
+.pbar{height:100%;border-radius:99px;background:var(--accent);transition:width .3s}
+.pbar.ok{background:var(--ok)} .pbar.warn{background:var(--warn)} .pbar.bad{background:var(--bad)}
+.risk{font-size:12px;padding:8px 10px;border-radius:8px;background:var(--bad-soft);color:var(--bad);margin-bottom:6px;cursor:pointer}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.kpi{background:var(--accent-soft);border-radius:10px;padding:10px 12px}
+.kpi .v{font-size:20px;font-weight:800;color:var(--accent)}
+.kpi .l{font-size:11px;color:var(--sub)}
+svg.chart{width:100%;height:110px;display:block}
+/* items */
+.item{padding:10px 4px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.item .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item .t{font-weight:700;flex:1;min-width:140px}
+.item.done100 .t{color:var(--ok)}
+.tag{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-weight:600;white-space:nowrap}
+.due{font-size:12px;color:var(--sub);white-space:nowrap}
+.due.soon{color:var(--warn);font-weight:700}.due.over{color:var(--bad);font-weight:700}
+.item .ctl{display:flex;gap:10px;align-items:center;margin-top:6px}
+.item input[type=range]{flex:1;accent-color:var(--accent)}
+.pct{font-weight:800;width:46px;text-align:right}
+.pct.lo{color:var(--bad)}.pct.mid{color:var(--warn)}.pct.hi{color:var(--ok)}
+/* logs */
+.logday{margin-bottom:12px}
+.logday h4{font-size:12px;color:var(--sub);margin-bottom:6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.log{display:flex;gap:8px;padding:6px 2px;font-size:13px;align-items:baseline}
+.log .lt{font-weight:600;white-space:nowrap}
+.log .note{color:var(--sub);flex:1}
+.log .min{white-space:nowrap;color:var(--accent);font-weight:700}
+/* gear */
+.gear{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line)}
+.gear:last-child{border-bottom:none}
+.gear.done span{text-decoration:line-through;color:var(--sub)}
+.gear span{flex:1}
+.gearbar{font-size:12px;color:var(--sub);margin-bottom:8px}
+/* members */
+.member{padding:10px 4px;border-bottom:1px solid var(--line)}
+.member:last-child{border-bottom:none}
+.member .top{display:flex;align-items:center;gap:10px}
+.member .name{font-weight:700;flex:1}
+.overlay{position:fixed;inset:0;background:rgba(20,24,40,.45);display:none;align-items:center;justify-content:center;z-index:100}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:14px;padding:20px;width:380px;max-width:94vw;max-height:90vh;overflow:auto}
+.modal h3{font-size:15px;margin-bottom:12px}
+.modal .row{margin-bottom:10px}
+/* plan / fit */
+.fit{font-size:13px;line-height:1.8;padding:12px 14px;border-radius:10px}
+.fit.ok{background:var(--ok-soft)}.fit.warn{background:var(--warn-soft)}.fit.bad{background:var(--bad-soft)}
+.fit b.v{font-size:20px}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.wday{border:1px solid var(--line);border-radius:10px;padding:8px;min-height:120px;display:flex;flex-direction:column;gap:6px}
+.wday.today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.wday .wh{font-size:12px;font-weight:700;display:flex;justify-content:space-between;align-items:baseline}
+.wday .wh .dow{color:var(--sub);font-weight:600}
+.wday.sat .wh .dow{color:var(--accent)}.wday.sun .wh .dow{color:var(--bad)}
+.capbar{height:6px;border-radius:99px;background:#eceef4;overflow:hidden}
+.capbar>div{height:100%;background:var(--accent);transition:width .3s}
+.capbar>div.over{background:var(--bad)}
+.pblock{font-size:11px;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:4px 6px;display:flex;gap:4px;align-items:center;line-height:1.3}
+.pblock .pt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pblock .x{cursor:pointer;font-weight:700;opacity:.6}
+.pcap{font-size:11px;color:var(--sub)}
+.todo{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.todo:last-child{border-bottom:none}
+.todo .tt{flex:1;font-weight:600}
+.todo .tm{color:var(--accent);font-weight:700;white-space:nowrap}
+/* intensity */
+.ichip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;cursor:pointer;white-space:nowrap}
+.ichip.i1{background:var(--ok-soft);color:var(--ok)}
+.ichip.i2{background:var(--accent-soft);color:var(--accent)}
+.ichip.i3{background:var(--bad-soft);color:var(--bad)}
+.pblock.i1{background:var(--ok-soft);color:var(--ok)}
+.pblock.i3{background:var(--bad-soft);color:var(--bad)}
+.idots{display:flex;gap:3px;flex-wrap:wrap}
+.idot{width:8px;height:8px;border-radius:99px;display:inline-block}
+.idot.i1{background:var(--ok)}.idot.i2{background:var(--accent)}.idot.i3{background:var(--bad)}
+.capedit{width:50px;padding:1px 4px;font-size:11px;border-radius:6px}
+.capedit.ov{color:var(--accent);font-weight:700;border-color:var(--accent)}
+.caprow{font-size:11px;color:var(--sub);display:flex;align-items:center;gap:3px}
+/* palette (分配ボード) */
+.palette{display:flex;gap:8px;flex-wrap:wrap}
+.pchip{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:2px;border-left:4px solid var(--accent)}
+.pchip.i1{border-left-color:var(--ok)}.pchip.i2{border-left-color:var(--accent)}.pchip.i3{border-left-color:var(--bad)}
+.pchip .pt{font-weight:700;font-size:13px;color:var(--ink)}
+.pchip .pk{font-size:11px;color:var(--sub)}
+.pchip.sel{background:var(--accent);border-color:var(--accent)}
+.pchip.sel .pt,.pchip.sel .pk{color:#fff}
+.wday.armed{cursor:pointer}
+.wday.armed:hover{background:var(--accent-soft)}
+.pblock .x{margin-left:2px}
+/* record calendar */
+.caldow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.cdw{text-align:center;font-size:11px;color:var(--sub);font-weight:700}
+.cdw.sat{color:var(--accent)}.cdw.sun{color:var(--bad)}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cday{border:1px solid var(--line);border-radius:8px;min-height:54px;padding:4px;cursor:pointer;display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.cday:hover{background:var(--accent-soft)}
+.cday.out{opacity:.38}
+.cday.today{border-color:var(--accent)}
+.cday.sel{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent)}
+.cday .cn{font-size:12px;font-weight:700}
+.cday.sat .cn{color:var(--accent)}.cday.sun .cn{color:var(--bad)}
+.cday .cact{font-size:14px;font-weight:800;color:var(--accent);line-height:1}
+.cday .cpl{font-size:10px;color:var(--sub)}
+@media(max-width:640px){.week{grid-template-columns:1fr}.wday{min-height:auto}.cday{min-height:46px}.cday .cact{font-size:12px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>TIME <span>PIL🕐T</span></h1>
+  <select id="ev-select"></select>
+  <button class="btn ghost small" id="ev-new">＋大会を追加</button>
+  <button class="btn ghost small" id="share-btn">🔗 共有</button>
+  <span class="muted" id="sync-dot"></span>
+  <nav>
+    <button data-v="home" class="active">ホーム</button>
+    <button data-v="plan">プラン</button>
+    <button data-v="items">準備タスク</button>
+    <button data-v="logs">記録</button>
+    <button data-v="gear">持ち物</button>
+    <button data-v="members">メンバー</button>
+  </nav>
+</header>
+<main>
+
+<!-- ホーム -->
+<section id="v-home" class="view active">
+  <div id="home-empty" class="card empty" style="display:none">まず右上の「＋大会を追加」から大会を登録してください</div>
+  <div id="home-body">
+    <div class="card">
+      <h2 id="h-name"></h2>
+      <div class="hero">
+        <div class="count"><div class="d" id="h-days"></div><div class="l" id="h-date"></div></div>
+        <div class="pace" id="h-pace"></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="muted" style="display:flex;justify-content:space-between"><span>全体達成度 <b id="h-pct"></b></span><span id="h-expect"></span></div>
+        <div class="pbarwrap"><div class="pbar" id="h-bar"></div></div>
+        <div class="muted" id="h-fit" style="margin-top:8px"></div>
+      </div>
+      <div class="row" style="margin-top:8px;justify-content:flex-end">
+        <button class="btn ghost small" id="ev-edit">大会を編集</button>
+        <button class="btn danger small" id="ev-del">大会を削除</button>
+      </div>
+    </div>
+    <div class="card"><h2>📌 今日のプラン <span class="muted" id="today-cap"></span></h2><div id="today-plan"></div></div>
+    <div class="card"><h2>⚠️ 要注意タスク <span class="muted">期限が近い/超過していて達成度が低いもの</span></h2><div id="h-risks"></div></div>
+    <div class="card">
+      <h2>活動量(直近14日)</h2>
+      <div class="kpis" id="h-kpis" style="margin-bottom:10px"></div>
+      <svg class="chart" id="h-chart" viewBox="0 0 700 110" preserveAspectRatio="none"></svg>
+      <div class="muted" id="h-chart-label" style="text-align:right"></div>
+    </div>
+  </div>
+</section>
+
+<!-- プラン -->
+<section id="v-plan" class="view">
+  <div class="card">
+    <h2>間に合う? <span class="muted">残作業と「本番までに使える時間」の比較</span></h2>
+    <div id="plan-fit"></div>
+    <div class="row" style="margin-top:12px;align-items:flex-end">
+      <div class="field"><label>平日に使える時間(分/日)</label><input type="number" id="cap-wd" min="0" step="15" style="width:110px"></div>
+      <div class="field"><label>休日に使える時間(分/日)</label><input type="number" id="cap-we" min="0" step="15" style="width:110px"></div>
+      <div class="field"><label>1コマ=(分)</label><input type="number" id="cap-koma" min="5" step="5" style="width:90px"></div>
+      <button class="btn ghost small" id="cap-save">設定を保存</button>
+      <button class="btn small" id="plan-auto">⚡ 残りを自動で割り付け</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>タスクを置く <span class="muted">タスクを選んで、下のカレンダーの日をタップ → 1コマずつ配置</span></h2>
+    <div id="palette" class="palette"></div>
+    <div id="pal-hint" class="muted" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="btn ghost small" id="wk-prev">◀ 前の週</button>
+      <span id="wk-label" style="font-weight:700"></span>
+      <button class="btn ghost small" id="wk-next">次の週 ▶</button>
+    </div>
+    <div id="week-grid"></div>
+    <div class="muted" style="margin-top:8px">日をタップ＝選択中タスクを1コマ追加／ブロックの <b>−</b> で1コマ減・<b>✕</b> で全削除／青バー=埋まり具合(赤=オーバー)・下部は実績</div>
+  </div>
+</section>
+
+<!-- 準備タスク -->
+<section id="v-items" class="view">
+  <div class="card">
+    <h2>準備タスクを追加 <span class="muted">「何を・いつまでに」</span></h2>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:170px"><label>やること</label><input id="i-title" placeholder="例: 過去問3年分 / プレゼン資料 / 走り込み"></div>
+      <div class="field"><label>期限</label><input type="date" id="i-due"></div>
+      <div class="field"><label>見込み(時間)</label><input type="number" id="i-est" min="0.5" step="0.5" value="2" style="width:80px"></div>
+      <div class="field"><label>強度</label><select id="i-int"><option value="1">軽</option><option value="2" selected>中</option><option value="3">重</option></select></div>
+      <div class="field"><label>担当</label><select id="i-owner"></select></div>
+      <button class="btn" id="i-add">追加</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>進行中 <span class="muted">スライダーで達成度を更新</span></h2>
+    <div id="items-open"></div>
+  </div>
+  <div class="card"><h2>完了(100%)</h2><div id="items-done"></div></div>
+</section>
+
+<!-- 記録 -->
+<section id="v-logs" class="view">
+  <div class="card">
+    <h2>今日の実績を記録</h2>
+    <div class="row">
+      <div class="field"><label>日付</label><input type="date" id="l-date"></div>
+      <div class="field" style="min-width:160px"><label>準備タスク</label><select id="l-item"></select></div>
+      <div class="field"><label>時間(分)</label><input type="number" id="l-min" min="0" step="5" value="30" style="width:80px"></div>
+      <div class="field"><label>達成度を更新</label><select id="l-pct"></select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1"><label>メモ(何をどこまでやったか)</label><input id="l-note" placeholder="例: 過去問2019年分を解いた。正答率7割"></div>
+      <button class="btn" id="l-add">記録する</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>カレンダー <span class="muted">日をクリックすると、その日付で記録できます</span></h2>
+    <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="btn ghost small" id="cal-prev">◀</button>
+      <span id="cal-label" style="font-weight:700"></span>
+      <button class="btn ghost small" id="cal-next">▶</button>
+    </div>
+    <div id="cal-dows" class="caldow"></div>
+    <div id="cal-grid" class="calgrid"></div>
+    <div class="muted" style="margin-top:8px">大きい数字＝実績(分)・小さい字＝計画(分)・選択中の日は枠が青</div>
+  </div>
+  <div class="card"><h2>実績ログ</h2><div id="log-list"></div></div>
+</section>
+
+<!-- 持ち物 -->
+<section id="v-gear" class="view">
+  <div class="card">
+    <h2>持ち物・用意リスト</h2>
+    <div class="gearbar" id="gear-bar"></div>
+    <div class="row">
+      <div class="field" style="flex:1"><label>用意するもの</label><input id="g-name" placeholder="例: 受験票 / ユニフォーム / ポスター印刷"></div>
+      <button class="btn" id="g-add">追加</button>
+    </div>
+    <div id="gear-list" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<!-- メンバー -->
+<section id="v-members" class="view">
+  <div class="card">
+    <h2>メンバー</h2>
+    <div class="row">
+      <div class="field"><label>名前</label><input id="m-name" placeholder="例: 璃恩"></div>
+      <button class="btn" id="m-add">追加</button>
+    </div>
+    <div id="member-list" style="margin-top:10px"></div>
+  </div>
+</section>
+</main>
+
+<!-- 大会 追加/編集 -->
+<div class="overlay" id="ev-overlay">
+  <div class="modal">
+    <h3 id="evm-title">大会を追加</h3>
+    <div class="row"><div class="field" style="flex:1"><label>大会名</label><input id="evm-name" placeholder="例: 県大会 / 基本情報技術者試験 / 全国学生討論会"></div></div>
+    <div class="row">
+      <div class="field"><label>本番日(未定なら空欄でOK)</label><input type="date" id="evm-date"></div>
+      <div class="field"><label>種類</label><select id="evm-cat"><option>スポーツ</option><option>試験</option><option>討論会</option><option>学術大会</option><option>コンテスト</option><option>その他</option></select></div>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost small" id="evm-cancel">キャンセル</button>
+      <button class="btn small" id="evm-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 共有モーダル -->
+<div class="overlay" id="share-overlay">
+  <div class="modal">
+    <h3>🔗 みんなで共有 (Google)</h3>
+    <div class="muted" style="margin-bottom:10px" id="fb-status"></div>
+    <details style="margin-bottom:10px">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px">初回セットアップ手順(無料・Googleアカウントだけ・約10分)</summary>
+      <ol style="font-size:12px;line-height:1.9;padding-left:18px;margin-top:6px">
+        <li><b>sheets.new</b> を開いて空のスプレッドシートを作る</li>
+        <li>メニュー「拡張機能」→「Apps Script」を開く</li>
+        <li>最初のコードを全部消し、配布された <b>timepilot-gas.gs</b> の中身を貼り付けて保存(💾)</li>
+        <li>右上「デプロイ」→「新しいデプロイ」→ 種類で<b>ウェブアプリ</b>を選択</li>
+        <li>「実行:自分」「アクセス:<b>全員</b>」にしてデプロイ →初回は表示に従って承認</li>
+        <li>表示された<b>ウェブアプリのURL(.../exec)</b>をコピーして下に貼り付け→保存</li>
+      </ol>
+      <div class="muted" style="font-size:11px">※URLを知っている人は誰でも読み書きできます。ゼミ/部活内での利用を想定し、個人情報は書かないでください。</div>
+    </details>
+    <div class="field" style="margin-bottom:10px">
+      <label>共有サーバーのURL (GASの /exec) を貼り付け</label>
+      <textarea id="fb-cfg" rows="2" placeholder="https://script.google.com/macros/s/XXXXXXXX/exec"></textarea>
+    </div>
+    <div class="row" style="margin-bottom:14px"><button class="btn small" id="fb-save">設定を保存</button></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+    <div id="share-cur" style="margin-bottom:12px;font-size:13px;line-height:1.8"></div>
+    <div class="row">
+      <div class="field"><label>共有コードで参加</label><input id="join-code" placeholder="例: A1B2C3" style="text-transform:uppercase;width:120px"></div>
+      <button class="btn small" id="join-btn">参加</button>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn ghost small" id="share-close">閉じる</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const KEY="taikai_compass_v1";
+const pad=n=>String(n).padStart(2,"0");
+const fmtD=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>fmtD(new Date());
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtMin=m=>m>=60?`${Math.floor(m/60)}h${m%60?m%60+"m":""}`:`${m}m`;
+const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
+
+/* ---------- state ---------- */
+let S={events:[],cur:null};
+try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
+const localSave=()=>localStorage.setItem(KEY,JSON.stringify(S));
+const save=()=>{localSave();schedulePush()};
+const ev=()=>S.events.find(e=>e.id===S.cur)||null;
+
+/* ---------- tabs ---------- */
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x===b));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("#v-"+b.dataset.v).classList.add("active");renderAll();
+});
+
+/* ---------- event CRUD ---------- */
+let editingEv=null;
+function openEvModal(e){
+  editingEv=e||null;
+  $("#evm-title").textContent=e?"大会を編集":"大会を追加";
+  $("#evm-name").value=e?e.name:"";
+  $("#evm-date").value=e?e.date:"";
+  $("#evm-cat").value=e?e.cat:"スポーツ";
+  $("#ev-overlay").classList.add("show");
+}
+$("#ev-new").onclick=()=>openEvModal(null);
+$("#ev-edit").onclick=()=>{if(ev())openEvModal(ev())};
+$("#evm-cancel").onclick=()=>$("#ev-overlay").classList.remove("show");
+$("#ev-overlay").onclick=e=>{if(e.target.id==="ev-overlay")$("#ev-overlay").classList.remove("show")};
+$("#evm-save").onclick=()=>{
+  const name=$("#evm-name").value.trim(),date=$("#evm-date").value;
+  if(!name)return alert("大会名を入力してください");
+  if(editingEv){editingEv.name=name;editingEv.date=date;editingEv.cat=$("#evm-cat").value}
+  else{
+    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],gear:[],members:["自分"],plans:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
+    S.events.push(e);S.cur=e.id;
+  }
+  $("#ev-overlay").classList.remove("show");save();renderAll();
+};
+$("#ev-del").onclick=()=>{
+  if(!ev()||!confirm(`「${ev().name}」を全データごと削除しますか?`))return;
+  S.events=S.events.filter(e=>e.id!==S.cur);S.cur=S.events.length?S.events[0].id:null;
+  save();renderAll();
+};
+$("#ev-select").onchange=()=>{S.cur=$("#ev-select").value;localSave();renderAll()};
+
+/* ---------- progress / pace ---------- */
+function overallPct(e){
+  if(!e.items.length)return 0;
+  let w=0,s=0;
+  e.items.forEach(i=>{const wt=i.est||1;w+=wt;s+=wt*i.pct});
+  return w?Math.round(s/w):0;
+}
+function expectedPct(e){
+  if(!e.date)return null;
+  const total=daysBetween(e.createdAt,e.date);
+  if(total<=0)return 100;
+  return Math.min(100,Math.max(0,Math.round(daysBetween(e.createdAt,today())/total*100)));
+}
+function paceInfo(e){
+  const p=overallPct(e),ex=expectedPct(e);
+  if(!e.items.length)return{cls:"warn",msg:"準備タスクをまだ登録していません。「準備タスク」タブで本番までにやることを洗い出しましょう。"};
+  if(ex==null)return{cls:"warn",msg:`<b class="v">本番日が未定です 📅</b><br>現在の達成度は<b>${p}%</b>。「大会を編集」で本番日を設定すると、残り日数に応じたペース判定が表示されます。`};
+  const diff=p-ex;
+  const left=daysBetween(today(),e.date);
+  if(left<0)return{cls:"ok",msg:"本番は終了しました。おつかれさまでした!ログを振り返って次に活かしましょう。"};
+  if(diff>=-5)return{cls:"ok",msg:`<b class="v">順調です ✅</b><br>経過時間からの目安は${ex}%、現在<b>${p}%</b>(${diff>=0?"+":""}${diff}pt)。このペースを維持しましょう。`};
+  if(diff>=-20)return{cls:"warn",msg:`<b class="v">やや遅れ気味 ⚠️</b><br>目安${ex}%に対して現在<b>${p}%</b>(${diff}pt)。要注意タスクから着手して挽回しましょう。`};
+  return{cls:"bad",msg:`<b class="v">かなり遅れています 🔥</b><br>目安${ex}%に対して現在<b>${p}%</b>(${diff}pt)。タスクの優先順位を絞るか、計画の見直しを。残り<b>${left}日</b>です。`};
+}
+/* ---------- 計画・稼働可能時間 (plan / capacity) ---------- */
+const parseD=ds=>new Date(ds+"T00:00:00");
+const isWeekend=ds=>{const d=parseD(ds).getDay();return d===0||d===6};
+function dayCap(e,ds){const o=(e.capOverrides||{})[ds];return o!=null?o:(isWeekend(ds)?(e.capWe||0):(e.capWd||0))}
+const intOf=i=>(i&&i.intensity)||2;
+const INTLBL={1:"軽",2:"中",3:"重"};
+function remainMin(i){return Math.max(0,Math.round((i.est||1)*60*(1-(i.pct||0)/100)))}
+function plannedMin(e,ds){return (e.plans||[]).filter(p=>p.date===ds).reduce((s,p)=>s+(p.min||0),0)}
+function plannedForItem(e,id){return (e.plans||[]).filter(p=>p.itemId===id).reduce((s,p)=>s+(p.min||0),0)}
+function fitInfo(e){
+  const rem=e.items.filter(i=>i.pct<100).reduce((s,i)=>s+remainMin(i),0);
+  if(!e.date)return{rem,avail:null,diff:null};
+  let avail=0,d=parseD(today());const end=parseD(e.date);
+  while(d<end){avail+=dayCap(e,fmtD(d));d.setDate(d.getDate()+1)}
+  return{rem,avail,diff:avail-rem};
+}
+function autoAllocate(e){
+  e.plans=e.plans||[];
+  const tasks=e.items.filter(i=>i.pct<100)
+    .map(i=>({i,need:Math.max(0,remainMin(i)-plannedForItem(e,i.id))}))
+    .filter(x=>x.need>0)
+    .sort((a,b)=>((a.i.due||"9999")<(b.i.due||"9999")?-1:1));
+  let d=parseD(today());const end=parseD(e.date),days=[];
+  while(d<end){const ds=fmtD(d);days.push({ds,free:Math.max(0,dayCap(e,ds)-plannedMin(e,ds))});d.setDate(d.getDate()+1)}
+  let unplaced=0;
+  for(const tk of tasks){
+    let need=tk.need;
+    for(const day of days){
+      if(need<=0)break;
+      if(tk.i.due&&day.ds>tk.i.due)break; // そのタスクの締切より後には積まない
+      if(day.free<=0)continue;
+      const put=Math.min(need,day.free);
+      e.plans.push({id:uid(),itemId:tk.i.id,date:day.ds,min:put});
+      day.free-=put;need-=put;
+    }
+    unplaced+=need;
+  }
+  return unplaced;
+}
+
+function riskItems(e){
+  const t=today();
+  return e.items.filter(i=>i.pct<100&&i.due).map(i=>{
+    const left=daysBetween(t,i.due);
+    let score=0;
+    if(left<0)score=3;else if(left<=3&&i.pct<70)score=2;else if(left<=7&&i.pct<40)score=1;
+    return{i,left,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.left-b.left);
+}
+
+/* ---------- home ---------- */
+function renderHome(){
+  const e=ev();
+  $("#home-empty").style.display=e?"none":"block";
+  $("#home-body").style.display=e?"block":"none";
+  if(!e)return;
+  const left=e.date?daysBetween(today(),e.date):null;
+  $("#h-name").textContent=`${e.name}(${e.cat})`;
+  $("#h-days").textContent=left==null?"日程未定":left>0?`あと${left}日`:left===0?"今日!":"終了";
+  $("#h-date").textContent=e.date?`本番: ${e.date}`:"本番日: 未設定(「大会を編集」で設定)";
+  const pi=paceInfo(e);
+  $("#h-pace").className="pace "+pi.cls;$("#h-pace").innerHTML=pi.msg;
+  const p=overallPct(e),ex=expectedPct(e);
+  $("#h-pct").textContent=p+"%";
+  $("#h-expect").textContent=ex==null?"":`目安(経過${ex}%)`;
+  const bar=$("#h-bar");bar.style.width=p+"%";bar.className="pbar "+pi.cls;
+  // 間に合う? サマリー
+  const fi=fitInfo(e);const fit=$("#h-fit");
+  if(e.date&&(left==null||left>=0)&&fi.avail!=null){
+    const df=fi.diff,c=df>=120?"var(--ok)":df>=0?"var(--warn)":"var(--bad)";
+    fit.innerHTML=`残作業 <b>${fmtMin(fi.rem)}</b> ／ 本番まで使える時間 <b>${fmtMin(fi.avail)}</b> → <b style="color:${c}">${df>=0?"+":"−"}${fmtMin(Math.abs(df))}${df<0?" 不足":" 余裕"}</b>`;
+  }else fit.textContent="";
+  // 今日のプラン
+  const tds=today();
+  const tplans=(e.plans||[]).filter(p=>p.date===tds);
+  const tsum=tplans.reduce((s,p)=>s+p.min,0);
+  const tact=e.logs.filter(l=>l.date===tds).reduce((s,l)=>s+l.min,0);
+  $("#today-cap").textContent=tplans.length?`計画 ${fmtMin(tsum)} ／ 実績 ${fmtMin(tact)}（今日の容量 ${dayCap(e,tds)}分）`:"";
+  $("#today-plan").innerHTML=tplans.length?tplans.map(p=>{
+    const it=e.items.find(x=>x.id===p.itemId);
+    return `<div class="todo"><span class="tt">${it?esc(it.title):"(削除されたタスク)"}</span><span class="tm">${p.min}分</span></div>`;
+  }).join(""):`<div class="empty">今日の計画はまだありません。<button class="btn ghost small" onclick="gotoPlan()">プランで割り付ける</button></div>`;
+  const risks=riskItems(e);
+  $("#h-risks").innerHTML=risks.length?risks.slice(0,6).map(({i,left})=>
+    `<div class="risk" onclick="gotoItems()">${left<0?`期限を${-left}日超過`:`残り${left}日`} / 達成${i.pct}% — <b>${esc(i.title)}</b>${i.owner?`(${esc(i.owner)})`:""}</div>`).join("")
+    :`<div class="empty">今のところ危険なタスクはありません 👍</div>`;
+  const t=new Date();const days=[];
+  for(let k=13;k>=0;k--){const d=new Date(t);d.setDate(d.getDate()-k);days.push(fmtD(d))}
+  const perDay=days.map(ds=>e.logs.filter(l=>l.date===ds).reduce((s,l)=>s+l.min,0));
+  const tot14=perDay.reduce((a,b)=>a+b,0);
+  const activeDays=perDay.filter(m=>m>0).length;
+  const totalAll=e.logs.reduce((s,l)=>s+l.min,0);
+  $("#h-kpis").innerHTML=`
+    <div class="kpi"><div class="v">${fmtMin(tot14)}</div><div class="l">直近14日の活動</div></div>
+    <div class="kpi"><div class="v">${activeDays}/14日</div><div class="l">活動した日数</div></div>
+    <div class="kpi"><div class="v">${fmtMin(totalAll)}</div><div class="l">累計活動時間</div></div>
+    <div class="kpi"><div class="v">${e.items.filter(i=>i.pct>=100).length}/${e.items.length}</div><div class="l">完了タスク</div></div>`;
+  const max=Math.max(60,...perDay);
+  const bw=700/14;
+  $("#h-chart").innerHTML=perDay.map((m,k)=>{
+    const h=m/max*100;
+    return `<rect x="${k*bw+4}" y="${108-h}" width="${bw-8}" height="${Math.max(2,h)}" rx="3" fill="${m>0?"#4f6df5":"#e5e7eb"}"></rect>`;
+  }).join("");
+  $("#h-chart-label").textContent=`${days[0].slice(5)} 〜 ${days[13].slice(5)}(1本=1日)`;
+}
+window.gotoItems=()=>document.querySelector('nav button[data-v="items"]').click();
+window.gotoPlan=()=>document.querySelector('nav button[data-v="plan"]').click();
+
+/* ---------- items ---------- */
+$("#i-add").onclick=()=>{
+  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const title=$("#i-title").value.trim();
+  if(!title)return alert("やることを入力してください");
+  e.items.push({id:uid(),title,due:$("#i-due").value||e.date,est:+$("#i-est").value||1,owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()});
+  $("#i-title").value="";save();renderAll();
+};
+function dueCls(due,pct){
+  if(!due||pct>=100)return"";
+  const l=daysBetween(today(),due);
+  return l<0?"over":l<=3?"soon":"";
+}
+function itemHtml(i){
+  const pcls=i.pct>=70?"hi":i.pct>=30?"mid":"lo";
+  const e=ev();const planned=e?plannedForItem(e,i.id):0;const ic=intOf(i);
+  return `<div class="item ${i.pct>=100?"done100":""}">
+    <div class="top">
+      <span class="t">${esc(i.title)}</span>
+      <span class="ichip i${ic}" onclick="cycleInt('${i.id}')" title="クリックで強度変更(軽→中→重)">強度:${INTLBL[ic]}</span>
+      ${i.owner?`<span class="tag">${esc(i.owner)}</span>`:""}
+      <span class="due ${dueCls(i.due,i.pct)}">${i.due?`〆${i.due}`:"〆未定"}</span>
+      <span class="muted">見込み${i.est}h${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}</span>
+      <button class="btn danger small" onclick="delItem('${i.id}')">✕</button>
+    </div>
+    <div class="ctl">
+      <input type="range" min="0" max="100" step="5" value="${i.pct}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setPct('${i.id}',this.value)">
+      <span class="pct ${pcls}">${i.pct}%</span>
+    </div>
+  </div>`;
+}
+function renderItems(){
+  const e=ev();
+  const ownerSel=$("#i-owner");
+  ownerSel.innerHTML=e?e.members.map(m=>`<option>${esc(m)}</option>`).join(""):"";
+  if(!e){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">大会を追加してください</div>`;return}
+  const open=e.items.filter(i=>i.pct<100).sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
+  const done=e.items.filter(i=>i.pct>=100);
+  $("#items-open").innerHTML=open.length?open.map(itemHtml).join(""):`<div class="empty">準備タスクを追加しましょう</div>`;
+  $("#items-done").innerHTML=done.length?done.map(itemHtml).join(""):`<div class="empty">まだありません</div>`;
+}
+window.setPct=(id,v)=>{const e=ev();const i=e.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
+window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const e=ev();e.items=e.items.filter(x=>x.id!==id);save();renderAll()};
+
+/* ---------- logs ---------- */
+function renderLogForm(){
+  const e=ev();
+  $("#l-date").value=$("#l-date").value||today();
+  const sel=$("#l-item");const cur=sel.value;
+  sel.innerHTML=`<option value="">(タスクに紐づけない)</option>`+(e?e.items.map(i=>`<option value="${i.id}">${esc(i.title)}(現在${i.pct}%)</option>`).join(""):"");
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+  $("#l-pct").innerHTML=`<option value="">変更しない</option>`+[...Array(21)].map((_,k)=>`<option value="${k*5}">${k*5}%</option>`).join("");
+}
+$("#l-add").onclick=()=>{
+  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const note=$("#l-note").value.trim();
+  const min=+$("#l-min").value||0;
+  if(!note&&!min)return alert("時間かメモを入力してください");
+  e.logs.push({id:uid(),date:$("#l-date").value||today(),itemId:$("#l-item").value||null,min,note});
+  const np=$("#l-pct").value;
+  if(np!==""&&$("#l-item").value){const i=e.items.find(x=>x.id===$("#l-item").value);if(i){i.pct=+np;if(i.pct>=100)i.doneAt=today()}}
+  $("#l-note").value="";$("#l-pct").value="";
+  save();renderAll();
+};
+function renderLogs(){
+  const e=ev();
+  if(!e||!e.logs.length){$("#log-list").innerHTML=`<div class="empty">まだ記録がありません。今日やったことを残しましょう</div>`;return}
+  const byDate={};
+  e.logs.slice().sort((a,b)=>a.date<b.date?1:-1).forEach(l=>{(byDate[l.date]=byDate[l.date]||[]).push(l)});
+  $("#log-list").innerHTML=Object.entries(byDate).slice(0,30).map(([d,ls])=>{
+    const tot=ls.reduce((s,l)=>s+l.min,0);
+    return `<div class="logday"><h4>${d}${d===today()?"(今日)":""} — 計${fmtMin(tot)}</h4>`+
+      ls.map(l=>{const i=l.itemId&&e.items.find(x=>x.id===l.itemId);
+        return `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${i?esc(i.title):"その他"}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`}).join("")+`</div>`;
+  }).join("");
+}
+window.delLog=id=>{const e=ev();e.logs=e.logs.filter(l=>l.id!==id);save();renderAll()};
+
+/* ---------- gear ---------- */
+$("#g-add").onclick=()=>{
+  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const n=$("#g-name").value.trim();if(!n)return;
+  e.gear.push({id:uid(),name:n,done:false});$("#g-name").value="";save();renderAll();
+};
+function renderGear(){
+  const e=ev();
+  if(!e){$("#gear-list").innerHTML=`<div class="empty">大会を追加してください</div>`;$("#gear-bar").textContent="";return}
+  const done=e.gear.filter(g=>g.done).length;
+  $("#gear-bar").textContent=e.gear.length?`用意済み ${done}/${e.gear.length}`:"";
+  $("#gear-list").innerHTML=e.gear.length?e.gear.map(g=>
+    `<div class="gear ${g.done?"done":""}"><input type="checkbox" ${g.done?"checked":""} onchange="toggleGear('${g.id}')"><span>${esc(g.name)}</span><button class="btn danger small" onclick="delGear('${g.id}')">✕</button></div>`).join("")
+    :`<div class="empty">受験票、ユニフォーム、提出物の印刷…本番までに用意するものを追加</div>`;
+}
+window.toggleGear=id=>{const g=ev().gear.find(x=>x.id===id);g.done=!g.done;save();renderAll()};
+window.delGear=id=>{const e=ev();e.gear=e.gear.filter(x=>x.id!==id);save();renderAll()};
+
+/* ---------- members ---------- */
+$("#m-add").onclick=()=>{
+  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const n=$("#m-name").value.trim();if(!n)return;
+  if(e.members.includes(n))return alert("同名のメンバーがいます");
+  e.members.push(n);$("#m-name").value="";save();renderAll();
+};
+function renderMembers(){
+  const e=ev();
+  if(!e){$("#member-list").innerHTML=`<div class="empty">大会を追加してください</div>`;return}
+  $("#member-list").innerHTML=e.members.map(m=>{
+    const items=e.items.filter(i=>i.owner===m);
+    const open=items.filter(i=>i.pct<100);
+    let w=0,s=0;items.forEach(i=>{const wt=i.est||1;w+=wt;s+=wt*i.pct});
+    const p=w?Math.round(s/w):null;
+    const mins=e.logs.filter(l=>{const i=l.itemId&&e.items.find(x=>x.id===l.itemId);return i&&i.owner===m}).reduce((sm,l)=>sm+l.min,0);
+    return `<div class="member">
+      <div class="top"><span class="name">${esc(m)}</span>
+        <span class="muted">担当${items.length}件(未完了${open.length})/ 活動${fmtMin(mins)}</span>
+        ${m!=="自分"?`<button class="btn danger small" onclick="delMember('${esc(m)}')">✕</button>`:""}
+      </div>
+      ${p!=null?`<div class="pbarwrap" style="margin-top:6px"><div class="pbar ${p>=70?"ok":p>=30?"warn":"bad"}" style="width:${p}%"></div></div><div class="muted">担当タスク達成度 ${p}%</div>`:`<div class="muted">担当タスクなし</div>`}
+    </div>`;
+  }).join("");
+}
+window.delMember=name=>{
+  const e=ev();
+  if(!confirm(`${name} を削除しますか?(担当タスクは未割当になります)`))return;
+  e.members=e.members.filter(m=>m!==name);
+  e.items.forEach(i=>{if(i.owner===name)i.owner=""});
+  save();renderAll();
+};
+
+/* ---------- plan (週間プランナー) ---------- */
+let weekStart=null;
+function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const g=(x.getDay()+6)%7;x.setDate(x.getDate()-g);return x}
+const komaOf=e=>(e&&e.komaMin)||60;
+let selTask=null;
+window.selectTask=id=>{selTask=(selTask===id)?null:id;renderPlan()};
+window.dayTap=ds=>{
+  const e=ev();if(!e)return;
+  if(!selTask)return; // タスク未選択なら何もしない
+  const i=e.items.find(x=>x.id===selTask&&x.pct<100);if(!i)return;
+  const koma=komaOf(e);e.plans=e.plans||[];
+  const b=e.plans.find(p=>p.itemId===selTask&&p.date===ds);
+  if(b)b.min+=koma;else e.plans.push({id:uid(),itemId:selTask,date:ds,min:koma});
+  save();renderAll();
+};
+window.unplaceKoma=pid=>{const e=ev();const koma=komaOf(e);const b=(e.plans||[]).find(p=>p.id===pid);if(!b)return;b.min-=koma;if(b.min<=0)e.plans=e.plans.filter(p=>p.id!==pid);save();renderAll()};
+window.fillSelected=()=>{
+  const e=ev();if(!e||!selTask)return;
+  const i=e.items.find(x=>x.id===selTask&&x.pct<100);if(!i)return;
+  const koma=komaOf(e);let need=Math.max(0,remainMin(i)-plannedForItem(e,i.id));
+  if(need<=0)return alert("このタスクは残りがありません");
+  let end=i.due?(()=>{const x=parseD(i.due);x.setDate(x.getDate()+1);return x})():(e.date?parseD(e.date):null);
+  let d=parseD(today()),guard=0,placed=0;
+  while(need>0&&guard++<800){
+    if(end&&d>=end)break;
+    const ds=fmtD(d),free=Math.max(0,dayCap(e,ds)-plannedMin(e,ds));
+    if(free>=koma){const b=e.plans.find(p=>p.itemId===selTask&&p.date===ds);if(b)b.min+=koma;else e.plans.push({id:uid(),itemId:selTask,date:ds,min:koma});need-=koma;placed+=koma;}
+    d.setDate(d.getDate()+1);
+  }
+  save();renderAll();
+  if(placed<=0)alert("空きコマが見つかりませんでした。各日の空き時間や1コマの分数を見直してください");
+  else if(need>0)alert(`${Math.round(placed/koma)}コマ置きました。残りは締切/空きに収まりませんでした`);
+};
+window.delPlan=id=>{const e=ev();e.plans=(e.plans||[]).filter(p=>p.id!==id);save();renderAll()};
+$("#cap-save").onclick=()=>{const e=ev();if(!e)return;e.capWd=+$("#cap-wd").value||0;e.capWe=+$("#cap-we").value||0;e.komaMin=Math.max(5,+$("#cap-koma").value||60);save();renderAll()};
+$("#wk-prev").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()-7);weekStart=new Date(weekStart);renderPlan()};
+$("#wk-next").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()+7);weekStart=new Date(weekStart);renderPlan()};
+$("#plan-auto").onclick=()=>{
+  const e=ev();if(!e)return alert("先に大会を追加してください");
+  if(!e.date)return alert("自動割り付けには本番日が必要です。「大会を編集」で設定してください");
+  if((e.capWd||0)===0&&(e.capWe||0)===0)return alert("先に「使える時間」を設定してください");
+  if(!confirm("未完了タスクの残り時間を、今日から本番日までの各日に自動で割り付けます。\n(既存の計画は残したまま、不足分を追加します)"))return;
+  const unplaced=autoAllocate(e);save();renderAll();
+  if(unplaced>0)alert(`割り付けました。ただし ${fmtMin(unplaced)} 分は本番までに入りきりませんでした。\n容量を増やす・タスクを絞る・締切を見直すなどの検討を。`);
+  else alert("すべて割り付けました ✅");
+};
+function renderPlan(){
+  const e=ev();
+  const fitEl=$("#plan-fit");
+  if(!e){fitEl.innerHTML=`<div class="empty">大会を追加してください</div>`;$("#week-grid").innerHTML="";return}
+  const koma=komaOf(e);
+  if(document.activeElement!==$("#cap-wd"))$("#cap-wd").value=e.capWd!=null?e.capWd:120;
+  if(document.activeElement!==$("#cap-we"))$("#cap-we").value=e.capWe!=null?e.capWe:180;
+  if(document.activeElement!==$("#cap-koma"))$("#cap-koma").value=koma;
+  // タスクパレット
+  if(selTask&&!e.items.find(x=>x.id===selTask&&x.pct<100))selTask=null;
+  const openT=e.items.filter(i=>i.pct<100);
+  $("#palette").innerHTML=openT.length?openT.map(i=>{
+    const rem=Math.max(0,remainMin(i)-plannedForItem(e,i.id));
+    const rk=Math.ceil(rem/koma),ic=intOf(i);
+    return `<button class="pchip i${ic}${selTask===i.id?" sel":""}" onclick="selectTask('${i.id}')"><span class="pt">${esc(i.title)}</span><span class="pk">残${rk}コマ</span></button>`;
+  }).join(""):`<div class="empty">未完了タスクがありません。「準備タスク」で追加しましょう</div>`;
+  const selI=openT.find(i=>i.id===selTask);
+  $("#pal-hint").innerHTML=selI
+    ?`<b style="color:var(--accent)">「${esc(selI.title)}」を選択中</b> — カレンダーの日をタップして1コマ置く　<button class="btn ghost small" onclick="fillSelected()">残りをおまかせ配置</button> <button class="btn ghost small" onclick="selectTask(null)">選択解除</button>`
+    :`まず上のタスクを選んでください（1コマ＝${koma}分）`;
+  // 間に合う?
+  const fi=fitInfo(e),left=e.date?daysBetween(today(),e.date):null;
+  if(left!=null&&left<0){fitEl.className="fit ok";fitEl.innerHTML="本番は終了しました。おつかれさまでした!";}
+  else if(fi.avail==null){fitEl.className="fit warn";fitEl.innerHTML=`残作業は合計 <b>${fmtMin(fi.rem)}</b>。本番日が未定なので判定できません。「大会を編集」で本番日を設定しましょう。`;}
+  else{
+    const d=fi.diff,cls=d>=120?"ok":d>=0?"warn":"bad",head=d>=120?"余裕あり ✅":d>=0?"ギリギリ間に合う ⚠️":"このままでは足りません 🔥";
+    fitEl.className="fit "+cls;
+    fitEl.innerHTML=`<b class="v">${head}</b><br>残作業 <b>${fmtMin(fi.rem)}</b> ／ 本番まで使える時間 <b>${fmtMin(fi.avail)}</b>（残り${left}日）<br>差し引き <b>${d>=0?"+":"−"}${fmtMin(Math.abs(d))}</b> ${d<0?"足りません":"の余裕"}`;
+  }
+  // 週グリッド
+  if(!weekStart)weekStart=mondayOf(new Date());
+  const dows=["月","火","水","木","金","土","日"],days=[];
+  for(let k=0;k<7;k++){const d=new Date(weekStart);d.setDate(d.getDate()+k);days.push(d)}
+  $("#wk-label").textContent=`${fmtD(days[0]).slice(5)} 〜 ${fmtD(days[6]).slice(5)}`;
+  $("#week-grid").className="week";
+  $("#week-grid").innerHTML=days.map((d,k)=>{
+    const ds=fmtD(d),cap=dayCap(e,ds),pl=plannedMin(e,ds);
+    const act=e.logs.filter(l=>l.date===ds).reduce((s,l)=>s+l.min,0);
+    const ratio=cap?Math.min(100,pl/cap*100):(pl?100:0),over=cap&&pl>cap;
+    const isOv=(e.capOverrides||{})[ds]!=null;
+    const capK=Math.floor(cap/koma),plK=Math.round(pl/koma);
+    const cls=["wday",ds===today()?"today":"",k===5?"sat":"",k===6?"sun":"",selTask?"armed":""].filter(Boolean).join(" ");
+    const dayItems={};
+    const blocks=(e.plans||[]).filter(p=>p.date===ds).map(p=>{
+      const it=e.items.find(x=>x.id===p.itemId);const ic=it?intOf(it):2;if(it)dayItems[it.id]=ic;
+      const lbl=p.min%koma===0?`${Math.round(p.min/koma)}コマ`:`${p.min}m`;
+      return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span>${lbl}</span><span class="x" title="1コマ減らす" onclick="event.stopPropagation();unplaceKoma('${p.id}')">−</span><span class="x" title="まるごと削除" onclick="event.stopPropagation();delPlan('${p.id}')">✕</span></div>`;
+    }).join("");
+    const dots=Object.values(dayItems).sort((a,b)=>b-a).map(v=>`<span class="idot i${v}"></span>`).join("");
+    return `<div class="${cls}" onclick="dayTap('${ds}')">
+      <div class="wh"><span>${d.getDate()}<span class="dow"> ${dows[k]}</span></span><span class="pcap">${plK}/${capK}コマ</span></div>
+      <div class="caprow">空き<input class="capedit${isOv?" ov":""}" type="number" min="0" step="15" value="${cap}" onclick="event.stopPropagation()" onchange="setDayCap('${ds}',this.value)">分</div>
+      <div class="capbar"><div class="${over?"over":""}" style="width:${ratio}%"></div></div>
+      ${dots?`<div class="idots" title="強度(タスク別 軽/中/重)">${dots}</div>`:""}
+      ${blocks||`<div class="pcap" style="text-align:center;padding:8px 0">${selTask?"＋タップで置く":"—"}</div>`}
+      ${act?`<div class="pcap">実績 ${fmtMin(act)}</div>`:""}
+    </div>`;
+  }).join("");
+}
+
+/* ---------- 追加機能: 強度 / 日別容量 / 分割 / 記録カレンダー ---------- */
+window.cycleInt=id=>{const e=ev();const i=e.items.find(x=>x.id===id);if(!i)return;i.intensity=(intOf(i)%3)+1;save();renderAll()};
+window.setDayCap=(ds,v)=>{const e=ev();if(!e)return;e.capOverrides=e.capOverrides||{};const n=Math.max(0,+v||0);const base=isWeekend(ds)?(e.capWe||0):(e.capWd||0);if(n===base)delete e.capOverrides[ds];else e.capOverrides[ds]=n;save();renderAll()};
+/* 記録カレンダー */
+let calMonth=null;
+function monthStart(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(1);return x}
+$("#cal-prev").onclick=()=>{calMonth=calMonth||monthStart(new Date());calMonth.setMonth(calMonth.getMonth()-1);calMonth=new Date(calMonth);renderLogCal()};
+$("#cal-next").onclick=()=>{calMonth=calMonth||monthStart(new Date());calMonth.setMonth(calMonth.getMonth()+1);calMonth=new Date(calMonth);renderLogCal()};
+window.pickLogDate=ds=>{$("#l-date").value=ds;renderLogCal();const n=$("#l-note");if(n)n.focus()};
+function renderLogCal(){
+  const e=ev();const grid=$("#cal-grid");if(!grid)return;
+  if(!e){grid.innerHTML="";$("#cal-label").textContent="";$("#cal-dows").innerHTML="";return}
+  if(!calMonth)calMonth=monthStart(new Date());
+  $("#cal-label").textContent=`${calMonth.getFullYear()}年 ${calMonth.getMonth()+1}月`;
+  const dows=["月","火","水","木","金","土","日"];
+  $("#cal-dows").innerHTML=dows.map((w,k)=>`<div class="cdw${k===5?" sat":""}${k===6?" sun":""}">${w}</div>`).join("");
+  const off=(calMonth.getDay()+6)%7,start=new Date(calMonth);start.setDate(calMonth.getDate()-off);
+  const seld=$("#l-date").value||today();
+  let html="";
+  for(let k=0;k<42;k++){
+    const d=new Date(start);d.setDate(start.getDate()+k);const ds=fmtD(d);
+    const inM=d.getMonth()===calMonth.getMonth();
+    const act=e.logs.filter(l=>l.date===ds).reduce((s,l)=>s+l.min,0);
+    const pl=plannedMin(e,ds);
+    const cls=["cday",inM?"":"out",ds===today()?"today":"",ds===seld?"sel":"",d.getDay()===6?"sat":"",d.getDay()===0?"sun":""].filter(Boolean).join(" ");
+    html+=`<div class="${cls}" onclick="pickLogDate('${ds}')"><div class="cn">${d.getDate()}</div>${act?`<div class="cact">${act}</div>`:""}${pl?`<div class="cpl">計${pl}</div>`:""}</div>`;
+  }
+  grid.className="calgrid";grid.innerHTML=html;
+}
+
+/* ---------- header / render ---------- */
+function renderHeader(){
+  const sel=$("#ev-select");
+  sel.innerHTML=S.events.length?S.events.map(e=>{
+    const lbl=e.date?(daysBetween(today(),e.date)>=0?"あと"+daysBetween(today(),e.date)+"日":"終了"):"日程未定";
+    return `<option value="${e.id}">${esc(e.name)}(${lbl})</option>`;
+  }).join(""):`<option value="">大会がありません</option>`;
+  if(S.cur)sel.value=S.cur;
+  setSync();
+}
+function renderAll(){renderHeader();renderHome();renderPlan();renderItems();renderLogForm();renderLogCal();renderLogs();renderGear();renderMembers()}
+
+/* ---------- 共有 (Google Apps Script Web App + ポーリング) ---------- */
+const GAS_URL="https://script.google.com/macros/s/AKfycbxQp9nO93q_Jb_hCTC1se_Tz7ODRQ42Ru4_AqmCEymxKdi8pok-b1kRWSAFGXE-_2fV/exec"; /* ←Apps Script の /exec URL。これで全員「開くだけ」で共有できます */
+const GASKEY="taikai_gas_url";
+let lastWriteId=null,pushTimer=null,pollTimer=null,gasBusy=false;
+const gasUrl=()=>GAS_URL||localStorage.getItem(GASKEY)||"";
+function normalize(e){
+  e.items=e.items||[];e.logs=e.logs||[];e.gear=e.gear||[];e.plans=e.plans||[];
+  e.capOverrides=e.capOverrides||{};
+  if(e.komaMin==null)e.komaMin=60;
+  e.items.forEach(i=>{if(i.intensity==null)i.intensity=2});
+  if(e.capWd==null)e.capWd=120;if(e.capWe==null)e.capWe=180;
+  e.members=(e.members&&e.members.length)?e.members:["自分"];
+  return e;
+}
+async function gasGet(room){
+  const r=await fetch(gasUrl()+"?room="+encodeURIComponent(room),{method:"GET"});
+  return await r.json();
+}
+async function gasPost(room,data,writeId){
+  /* Content-Type を付けない=text/plain扱いになり、CORSのプリフライトを避けられる */
+  const r=await fetch(gasUrl(),{method:"POST",body:JSON.stringify({room,data,writeId})});
+  return await r.json();
+}
+function schedulePush(){
+  const e=ev();
+  if(!e||!e.shareCode||!gasUrl())return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>pushEvent(e),600);
+}
+async function pushEvent(e){
+  if(!gasUrl()||!e.shareCode)return;
+  lastWriteId=uid();
+  try{await gasPost(e.shareCode,JSON.parse(JSON.stringify(e)),lastWriteId)}
+  catch(err){console.error("push失敗",err)}
+}
+function applyRemote(code,data){
+  const remote=normalize(data);
+  remote.shareCode=code;
+  const idx=S.events.findIndex(x=>x.shareCode===code);
+  if(idx>=0){remote.id=S.events[idx].id;S.events[idx]=remote}
+  else{remote.id=remote.id||uid();S.events.push(remote)}
+  localSave();
+}
+async function pollOnce(){
+  if(gasBusy||!gasUrl())return;
+  const rooms=[...new Set(S.events.filter(e=>e.shareCode).map(e=>e.shareCode))];
+  if(!rooms.length)return;
+  gasBusy=true;let changed=false;
+  try{
+    for(const code of rooms){
+      const v=await gasGet(code);
+      if(!v||!v.ok||!v.exists||!v.data)continue;
+      if(v.writeId&&v.writeId===lastWriteId)continue; // 自分の書き込みのエコーは無視
+      applyRemote(code,v.data);changed=true;
+    }
+  }catch(err){/* 通信失敗は無視して次回再試行 */}
+  finally{gasBusy=false}
+  if(changed)renderAll();
+}
+function startPolling(){
+  if(pollTimer||!gasUrl())return;
+  pollOnce();
+  pollTimer=setInterval(pollOnce,4000);
+}
+function setSync(){
+  const e=ev();
+  const el=$("#sync-dot");
+  if(el)el.textContent=(e&&e.shareCode&&gasUrl())?`🟢 共有中: ${e.shareCode}`:"";
+}
+function renderShare(){
+  const url=gasUrl();
+  $("#fb-status").textContent=url?(GAS_URL?"✅ 共有サーバー設定済み(このファイルに埋め込み済み)":"✅ 共有サーバーURL 保存済み"):"未設定 — 下の手順でGASのURLを用意して貼り付けてください";
+  if(!GAS_URL&&url&&!$("#fb-cfg").value)$("#fb-cfg").value=url;
+  const e=ev();
+  $("#share-cur").innerHTML=!e?`<span class="muted">大会がありません</span>`
+    :e.shareCode?`「${esc(e.name)}」を共有中 — コード: <b style="font-size:16px">${e.shareCode}</b><br><span class="muted">メンバーはこのコードで「参加」すると同じデータを編集できます(数秒ごとに同期)</span><br><button class="btn danger small" onclick="stopShare()" style="margin-top:6px">この端末での共有を停止</button>`
+    :`「${esc(e.name)}」はまだ共有されていません<br><button class="btn small" onclick="startShare()" style="margin-top:6px">共有を開始してコードを発行</button>`;
+}
+window.startShare=async()=>{
+  const e=ev();
+  if(!e)return alert("先に大会を追加してください");
+  if(!gasUrl())return alert("先に共有サーバー(GAS)のURLを保存してください(モーダル内の手順参照)");
+  e.shareCode=e.shareCode||Math.random().toString(36).slice(2,8).toUpperCase();
+  localSave();await pushEvent(e);startPolling();
+  renderShare();setSync();
+  alert("共有を開始しました ✅ コード: "+e.shareCode);
+};
+window.stopShare=()=>{
+  const e=ev();if(!e||!e.shareCode)return;
+  e.shareCode=null;localSave();renderShare();setSync();
+};
+$("#share-btn").onclick=()=>{renderShare();$("#share-overlay").classList.add("show")};
+$("#share-close").onclick=()=>$("#share-overlay").classList.remove("show");
+$("#share-overlay").onclick=e=>{if(e.target.id==="share-overlay")$("#share-overlay").classList.remove("show")};
+$("#fb-save").onclick=()=>{
+  const t=$("#fb-cfg").value.trim();
+  if(!t){localStorage.removeItem(GASKEY);renderShare();setSync();return}
+  if(!/\/exec$/.test(t)&&!confirm("URLが「/exec」で終わっていません。このまま保存しますか?"))return;
+  localStorage.setItem(GASKEY,t);
+  renderShare();setSync();startPolling();
+  alert("URLを保存しました ✅ これで「共有を開始」できます");
+};
+$("#join-btn").onclick=async()=>{
+  const code=$("#join-code").value.trim().toUpperCase();
+  if(!code)return;
+  if(!gasUrl())return alert("先に共有サーバー(GAS)のURLを保存してください");
+  try{
+    const v=await gasGet(code);
+    if(!v||!v.ok)return alert("サーバーに接続できませんでした。URLを確認してください");
+    if(!v.exists||!v.data)return alert("コードが見つかりません: "+code);
+    applyRemote(code,v.data);
+    const joined=S.events.find(x=>x.shareCode===code);
+    if(joined)S.cur=joined.id;
+    localSave();startPolling();
+    $("#share-overlay").classList.remove("show");
+    renderAll();
+  }catch(err){alert("参加に失敗しました: "+err.message)}
+};
+// 起動時: 共有中の大会があれば自動でポーリング開始
+if(gasUrl())startPolling();
+
+S.events.forEach(normalize); // 既存データにも plans / 稼働可能時間の既定値を補完
+if(!S.cur&&S.events.length)S.cur=S.events[0].id;
+renderAll();
+</script>
+</body>
+</html>
