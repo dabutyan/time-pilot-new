@@ -156,6 +156,7 @@ svg.chart{width:100%;height:110px;display:block}
   <select id="ev-select"></select>
   <button class="btn ghost small" id="ev-new">＋大会を追加</button>
   <button class="btn ghost small" id="share-btn">🔗 共有</button>
+  <button class="btn ghost small" id="personal-btn">📱 端末同期</button>
   <span class="muted" id="sync-dot"></span>
   <nav>
     <button data-v="home" class="active">ホーム</button>
@@ -351,6 +352,25 @@ svg.chart{width:100%;height:110px;display:block}
   </div>
 </div>
 
+<!-- 個人同期モーダル -->
+<div class="overlay" id="personal-overlay">
+  <div class="modal">
+    <h3>📱 端末同期（全大会）</h3>
+    <p class="muted" style="margin-bottom:10px">自分のPC・スマホを1つのコードで丸ごと同期します。コードを知っている端末だけが同期されます。</p>
+    <div id="personal-status" style="margin-bottom:12px;font-size:13px;line-height:1.8"></div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="field">
+        <label>同期コード（自分で決めてもOK・空欄=自動発行）</label>
+        <input id="personal-code-input" placeholder="例: MYCODE" style="text-transform:uppercase;width:150px" maxlength="16">
+      </div>
+      <button class="btn small" onclick="startPersonalSync()">同期を開始</button>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn ghost small" id="personal-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 const $=s=>document.querySelector(s);
@@ -364,10 +384,10 @@ const fmtMin=m=>m>=60?`${Math.floor(m/60)}h${m%60?m%60+"m":""}`:`${m}m`;
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
 
 /* ---------- state ---------- */
-let S={events:[],cur:null};
+let S={events:[],cur:null,personalCode:null};
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 const localSave=()=>localStorage.setItem(KEY,JSON.stringify(S));
-const save=()=>{localSave();schedulePush()};
+const save=()=>{localSave();schedulePush();schedulePersonalPush()};
 const ev=()=>S.events.find(e=>e.id===S.cur)||null;
 
 /* ---------- tabs ---------- */
@@ -863,16 +883,26 @@ function applyRemote(code,data){
 async function pollOnce(){
   if(gasBusy||!gasUrl())return;
   const rooms=[...new Set(S.events.filter(e=>e.shareCode).map(e=>e.shareCode))];
-  if(!rooms.length)return;
+  if(!rooms.length&&!S.personalCode)return;
   gasBusy=true;let changed=false;
   try{
     for(const code of rooms){
       const v=await gasGet(code);
       if(!v||!v.ok||!v.exists||!v.data)continue;
-      if(v.writeId&&v.writeId===lastWriteId)continue; // 自分の書き込みのエコーは無視
+      if(v.writeId&&v.writeId===lastWriteId)continue;
       applyRemote(code,v.data);changed=true;
     }
-  }catch(err){/* 通信失敗は無視して次回再試行 */}
+    if(S.personalCode){
+      const v=await gasGet(S.personalCode);
+      if(v&&v.ok&&v.exists&&v.data&&v.data.events){
+        if(!v.writeId||v.writeId!==lastPersonalWriteId){
+          S.events=v.data.events.map(normalize);
+          if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
+          localSave();changed=true;
+        }
+      }
+    }
+  }catch(err){}
   finally{gasBusy=false}
   if(changed)renderAll();
 }
@@ -884,7 +914,11 @@ function startPolling(){
 function setSync(){
   const e=ev();
   const el=$("#sync-dot");
-  if(el)el.textContent=(e&&e.shareCode&&gasUrl())?`🟢 共有中: ${e.shareCode}`:"";
+  if(!el)return;
+  const parts=[];
+  if(S.personalCode&&gasUrl())parts.push(`📱 ${S.personalCode}`);
+  if(e&&e.shareCode&&gasUrl())parts.push(`🟢 共有中: ${e.shareCode}`);
+  el.textContent=parts.join(" ／ ");
 }
 function renderShare(){
   const url=gasUrl();
@@ -908,6 +942,47 @@ window.stopShare=()=>{
   const e=ev();if(!e||!e.shareCode)return;
   e.shareCode=null;localSave();renderShare();setSync();
 };
+
+/* ---------- 個人同期 (全大会を1コードで同期) ---------- */
+let lastPersonalWriteId=null,personalPushTimer=null;
+function schedulePersonalPush(){
+  if(!S.personalCode||!gasUrl())return;
+  clearTimeout(personalPushTimer);
+  personalPushTimer=setTimeout(pushPersonal,600);
+}
+async function pushPersonal(){
+  if(!S.personalCode||!gasUrl())return;
+  lastPersonalWriteId=uid();
+  try{await gasPost(S.personalCode,{events:JSON.parse(JSON.stringify(S.events))},lastPersonalWriteId)}
+  catch(err){console.error("personal push失敗",err)}
+}
+function renderPersonalSync(){
+  const el=$("#personal-status");if(!el)return;
+  if(S.personalCode){
+    el.innerHTML=`✅ 同期中 — コード: <b style="font-size:20px;letter-spacing:3px;color:var(--accent)">${S.personalCode}</b><br><span class="muted">スマホでも「📱 端末同期」→ 同じコードを入力 →「同期を開始」すると全大会が同期されます</span><br><button class="btn danger small" onclick="stopPersonalSync()" style="margin-top:8px">同期を停止</button>`;
+    const inp=$("#personal-code-input");if(inp)inp.value=S.personalCode;
+  }else{
+    el.innerHTML=`<span class="muted">未設定 — コードを入力(空欄なら自動発行)して「同期を開始」</span>`;
+  }
+  setSync();
+}
+window.startPersonalSync=async()=>{
+  if(!gasUrl())return alert("共有サーバー(GAS)のURLが設定されていません");
+  const inp=($("#personal-code-input").value||"").trim().toUpperCase();
+  S.personalCode=inp||Math.random().toString(36).slice(2,8).toUpperCase();
+  localSave();
+  await pushPersonal();
+  startPolling();
+  renderPersonalSync();
+  alert("端末同期を開始しました ✅\nコード: "+S.personalCode+"\n\nスマホでも「📱 端末同期」を開いて\n同じコードを入力→「同期を開始」");
+};
+window.stopPersonalSync=()=>{
+  S.personalCode=null;lastPersonalWriteId=null;
+  localSave();renderPersonalSync();
+};
+$("#personal-btn").onclick=()=>{renderPersonalSync();$("#personal-overlay").classList.add("show")};
+$("#personal-close").onclick=()=>$("#personal-overlay").classList.remove("show");
+$("#personal-overlay").onclick=e=>{if(e.target.id==="personal-overlay")$("#personal-overlay").classList.remove("show")};
 $("#share-btn").onclick=()=>{renderShare();$("#share-overlay").classList.add("show")};
 $("#share-close").onclick=()=>$("#share-overlay").classList.remove("show");
 $("#share-overlay").onclick=e=>{if(e.target.id==="share-overlay")$("#share-overlay").classList.remove("show")};
@@ -935,8 +1010,8 @@ $("#join-btn").onclick=async()=>{
     renderAll();
   }catch(err){alert("参加に失敗しました: "+err.message)}
 };
-// 起動時: 共有中の大会があれば自動でポーリング開始
-if(gasUrl())startPolling();
+// 起動時: 共有中の大会 or 個人同期コードがあれば自動でポーリング開始
+if(gasUrl()&&(S.events.some(e=>e.shareCode)||S.personalCode))startPolling();
 
 S.events.forEach(normalize); // 既存データにも plans / 稼働可能時間の既定値を補完
 if(!S.cur&&S.events.length)S.cur=S.events[0].id;
