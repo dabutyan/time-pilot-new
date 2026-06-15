@@ -177,18 +177,37 @@ svg.chart{width:100%;height:110px;display:block}
   .row{flex-direction:column;align-items:stretch}
   .row input,.row select{width:100%}
 }
+/* 今日タイムライン */
+.timeline{display:flex;flex-direction:column}
+.tslot{display:flex;min-height:48px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .15s}
+.tslot:hover{background:var(--bg)}
+.tslot.now{border-left:3px solid var(--accent)}
+.ttime{font-size:12px;color:var(--sub);font-weight:700;min-width:44px;padding:6px 4px 0;flex-shrink:0}
+.ttasks{flex:1;padding:4px;display:flex;flex-direction:column;gap:3px}
+.tslot-add{font-size:11px;color:var(--sub);padding:2px 0}
+/* 振り返り */
+.eval-item{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-bottom:1px solid var(--line)}
+.eval-item:last-child{border-bottom:none}
+.eval-title{font-weight:600;font-size:14px}
+.eval-btns{display:flex;gap:6px;flex-wrap:wrap}
+.eval-btn{padding:5px 12px;border:1px solid var(--line);background:transparent;border-radius:6px;cursor:pointer;font-size:13px;transition:all .15s}
+.eval-btn.sel-ok{background:#e6f9ee;border-color:var(--ok);color:#16a34a}
+.eval-btn.sel-so{background:#fff8e1;border-color:#f59e0b;color:#b45309}
+.eval-btn.sel-ng{background:#fee2e2;border-color:var(--bad);color:var(--bad)}
+.eval-note{border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:13px;width:100%;background:transparent;color:inherit;box-sizing:border-box;margin-top:2px}
 </style>
 </head>
 <body>
 <header>
   <h1>TIME <span>PIL🕐T</span></h1>
   <select id="ev-select"></select>
-  <button class="btn ghost small" id="ev-new">＋大会を追加</button>
+  <button class="btn ghost small" id="ev-new">＋プロジェクト追加</button>
   <button class="btn ghost small" id="share-btn">🔗 共有</button>
   <button class="btn ghost small" id="personal-btn">📱 端末同期</button>
   <span class="muted" id="sync-dot"></span>
   <nav>
     <button data-v="home" class="active">ホーム</button>
+    <button data-v="today">今日</button>
     <button data-v="plan">プラン</button>
     <button data-v="items">準備タスク</button>
     <button data-v="logs">記録</button>
@@ -200,7 +219,7 @@ svg.chart{width:100%;height:110px;display:block}
 
 <!-- ホーム -->
 <section id="v-home" class="view active">
-  <div id="home-empty" class="card empty" style="display:none">まず右上の「＋大会を追加」から大会を登録してください</div>
+  <div id="home-empty" class="card empty" style="display:none">まず右上の「＋プロジェクト追加」からプロジェクトを登録してください</div>
   <div id="home-body">
     <div class="card">
       <h2 id="h-name"></h2>
@@ -214,8 +233,8 @@ svg.chart{width:100%;height:110px;display:block}
         <div class="muted" id="h-fit" style="margin-top:8px"></div>
       </div>
       <div class="row" style="margin-top:8px;justify-content:flex-end">
-        <button class="btn ghost small" id="ev-edit">大会を編集</button>
-        <button class="btn danger small" id="ev-del">大会を削除</button>
+        <button class="btn ghost small" id="ev-edit">プロジェクト編集</button>
+        <button class="btn danger small" id="ev-del">プロジェクト削除</button>
       </div>
     </div>
     <div class="card"><h2>📌 今日のプラン <span class="muted" id="today-cap"></span></h2><div id="today-plan"></div></div>
@@ -226,6 +245,22 @@ svg.chart{width:100%;height:110px;display:block}
       <svg class="chart" id="h-chart" viewBox="0 0 700 110" preserveAspectRatio="none"></svg>
       <div class="muted" id="h-chart-label" style="text-align:right"></div>
     </div>
+  </div>
+</section>
+
+<!-- 今日タイムライン -->
+<section id="v-today" class="view">
+  <div class="card">
+    <h2>今日を組み立てる <span class="muted" id="today-tl-date"></span></h2>
+    <div id="today-tl-palette" class="palette"></div>
+    <div id="today-tl-hint" class="muted" style="margin-top:8px"></div>
+  </div>
+  <div class="card" style="padding:0 12px">
+    <div id="today-timeline"></div>
+  </div>
+  <div class="card">
+    <h2>振り返り <span class="muted">今日やったタスクを評価（夜に）</span></h2>
+    <div id="eval-list"></div>
   </div>
 </section>
 
@@ -336,11 +371,11 @@ svg.chart{width:100%;height:110px;display:block}
 <!-- 大会 追加/編集 -->
 <div class="overlay" id="ev-overlay">
   <div class="modal">
-    <h3 id="evm-title">大会を追加</h3>
-    <div class="row"><div class="field" style="flex:1"><label>大会名</label><input id="evm-name" placeholder="例: 県大会 / 基本情報技術者試験 / 全国学生討論会"></div></div>
+    <h3 id="evm-title">プロジェクトを追加</h3>
+    <div class="row"><div class="field" style="flex:1"><label>プロジェクト名</label><input id="evm-name" placeholder="例: 簿記2級試験 / キャリアデザイン / 春季大会"></div></div>
     <div class="row">
       <div class="field"><label>本番日(未定なら空欄でOK)</label><input type="date" id="evm-date"></div>
-      <div class="field"><label>種類</label><select id="evm-cat"><option>スポーツ</option><option>試験</option><option>討論会</option><option>学術大会</option><option>コンテスト</option><option>その他</option></select></div>
+      <div class="field"><label>種類</label><select id="evm-cat"><option>試験・資格</option><option>就活</option><option>ゼミ・研究</option><option>スポーツ・部活</option><option>コンテスト・討論</option><option>その他</option></select></div>
     </div>
     <div class="row" style="justify-content:flex-end">
       <button class="btn ghost small" id="evm-cancel">キャンセル</button>
@@ -384,7 +419,7 @@ svg.chart{width:100%;height:110px;display:block}
 <!-- 個人同期モーダル -->
 <div class="overlay" id="personal-overlay">
   <div class="modal">
-    <h3>📱 端末同期（全大会）</h3>
+    <h3>📱 端末同期（全プロジェクト）</h3>
     <p class="muted" style="margin-bottom:10px">自分のPC・スマホを1つのコードで丸ごと同期します。コードを知っている端末だけが同期されます。</p>
     <div id="personal-status" style="margin-bottom:12px;font-size:13px;line-height:1.8"></div>
     <div class="row" style="margin-bottom:8px">
@@ -430,10 +465,10 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
 let editingEv=null;
 function openEvModal(e){
   editingEv=e||null;
-  $("#evm-title").textContent=e?"大会を編集":"大会を追加";
+  $("#evm-title").textContent=e?"プロジェクトを編集":"プロジェクトを追加";
   $("#evm-name").value=e?e.name:"";
   $("#evm-date").value=e?e.date:"";
-  $("#evm-cat").value=e?e.cat:"スポーツ";
+  $("#evm-cat").value=e?e.cat:"その他";
   $("#ev-overlay").classList.add("show");
 }
 $("#ev-new").onclick=()=>openEvModal(null);
@@ -442,10 +477,10 @@ $("#evm-cancel").onclick=()=>$("#ev-overlay").classList.remove("show");
 $("#ev-overlay").onclick=e=>{if(e.target.id==="ev-overlay")$("#ev-overlay").classList.remove("show")};
 $("#evm-save").onclick=()=>{
   const name=$("#evm-name").value.trim(),date=$("#evm-date").value;
-  if(!name)return alert("大会名を入力してください");
+  if(!name)return alert("プロジェクト名を入力してください");
   if(editingEv){editingEv.name=name;editingEv.date=date;editingEv.cat=$("#evm-cat").value}
   else{
-    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],gear:[],members:["自分"],plans:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
+    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],gear:[],members:["自分"],plans:[],evals:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
     S.events.push(e);S.cur=e.id;
   }
   $("#ev-overlay").classList.remove("show");save();renderAll();
@@ -473,7 +508,7 @@ function expectedPct(e){
 function paceInfo(e){
   const p=overallPct(e),ex=expectedPct(e);
   if(!e.items.length)return{cls:"warn",msg:"準備タスクをまだ登録していません。「準備タスク」タブで本番までにやることを洗い出しましょう。"};
-  if(ex==null)return{cls:"warn",msg:`<b class="v">本番日が未定です 📅</b><br>現在の達成度は<b>${p}%</b>。「大会を編集」で本番日を設定すると、残り日数に応じたペース判定が表示されます。`};
+  if(ex==null)return{cls:"warn",msg:`<b class="v">本番日が未定です 📅</b><br>現在の達成度は<b>${p}%</b>。「プロジェクト編集」で本番日を設定すると、残り日数に応じたペース判定が表示されます。`};
   const diff=p-ex;
   const left=daysBetween(today(),e.date);
   if(left<0)return{cls:"ok",msg:"本番は終了しました。おつかれさまでした!ログを振り返って次に活かしましょう。"};
@@ -540,7 +575,7 @@ function renderHome(){
   const left=e.date?daysBetween(today(),e.date):null;
   $("#h-name").textContent=`${e.name}(${e.cat})`;
   $("#h-days").textContent=left==null?"日程未定":left>0?`あと${left}日`:left===0?"今日!":"終了";
-  $("#h-date").textContent=e.date?`本番: ${e.date}`:"本番日: 未設定(「大会を編集」で設定)";
+  $("#h-date").textContent=e.date?`本番: ${e.date}`:"本番日: 未設定(「プロジェクト編集」で設定)";
   const pi=paceInfo(e);
   $("#h-pace").className="pace "+pi.cls;$("#h-pace").innerHTML=pi.msg;
   const p=overallPct(e),ex=expectedPct(e);
@@ -591,7 +626,7 @@ window.gotoPlan=()=>document.querySelector('nav button[data-v="plan"]').click();
 
 /* ---------- items ---------- */
 $("#i-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const title=$("#i-title").value.trim();
   if(!title)return alert("やることを入力してください");
   e.items.push({id:uid(),title,due:$("#i-due").value||e.date,est:+$("#i-est").value||1,owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()});
@@ -624,7 +659,7 @@ function renderItems(){
   const e=ev();
   const ownerSel=$("#i-owner");
   ownerSel.innerHTML=e?e.members.map(m=>`<option>${esc(m)}</option>`).join(""):"";
-  if(!e){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">大会を追加してください</div>`;return}
+  if(!e){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;return}
   const open=e.items.filter(i=>i.pct<100).sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
   const done=e.items.filter(i=>i.pct>=100);
   $("#items-open").innerHTML=open.length?open.map(itemHtml).join(""):`<div class="empty">準備タスクを追加しましょう</div>`;
@@ -643,7 +678,7 @@ function renderLogForm(){
   $("#l-pct").innerHTML=`<option value="">変更しない</option>`+[...Array(21)].map((_,k)=>`<option value="${k*5}">${k*5}%</option>`).join("");
 }
 $("#l-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const note=$("#l-note").value.trim();
   const min=+$("#l-min").value||0;
   if(!note&&!min)return alert("時間かメモを入力してください");
@@ -669,13 +704,13 @@ window.delLog=id=>{const e=ev();e.logs=e.logs.filter(l=>l.id!==id);save();render
 
 /* ---------- gear ---------- */
 $("#g-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const n=$("#g-name").value.trim();if(!n)return;
   e.gear.push({id:uid(),name:n,done:false});$("#g-name").value="";save();renderAll();
 };
 function renderGear(){
   const e=ev();
-  if(!e){$("#gear-list").innerHTML=`<div class="empty">大会を追加してください</div>`;$("#gear-bar").textContent="";return}
+  if(!e){$("#gear-list").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;$("#gear-bar").textContent="";return}
   const done=e.gear.filter(g=>g.done).length;
   $("#gear-bar").textContent=e.gear.length?`用意済み ${done}/${e.gear.length}`:"";
   $("#gear-list").innerHTML=e.gear.length?e.gear.map(g=>
@@ -687,14 +722,14 @@ window.delGear=id=>{const e=ev();e.gear=e.gear.filter(x=>x.id!==id);save();rende
 
 /* ---------- members ---------- */
 $("#m-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先に大会を追加してください");
+  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const n=$("#m-name").value.trim();if(!n)return;
   if(e.members.includes(n))return alert("同名のメンバーがいます");
   e.members.push(n);$("#m-name").value="";save();renderAll();
 };
 function renderMembers(){
   const e=ev();
-  if(!e){$("#member-list").innerHTML=`<div class="empty">大会を追加してください</div>`;return}
+  if(!e){$("#member-list").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;return}
   $("#member-list").innerHTML=e.members.map(m=>{
     const items=e.items.filter(i=>i.owner===m);
     const open=items.filter(i=>i.pct<100);
@@ -756,8 +791,8 @@ $("#cap-save").onclick=()=>{const e=ev();if(!e)return;e.capWd=+$("#cap-wd").valu
 $("#wk-prev").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()-7);weekStart=new Date(weekStart);renderPlan()};
 $("#wk-next").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()+7);weekStart=new Date(weekStart);renderPlan()};
 $("#plan-auto").onclick=()=>{
-  const e=ev();if(!e)return alert("先に大会を追加してください");
-  if(!e.date)return alert("自動割り付けには本番日が必要です。「大会を編集」で設定してください");
+  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
+  if(!e.date)return alert("自動割り付けには本番日が必要です。「プロジェクト編集」で設定してください");
   if((e.capWd||0)===0&&(e.capWe||0)===0)return alert("先に「使える時間」を設定してください");
   if(!confirm("未完了タスクの残り時間を、今日から本番日までの各日に自動で割り付けます。\n(既存の計画は残したまま、不足分を追加します)"))return;
   const unplaced=autoAllocate(e);save();renderAll();
@@ -767,7 +802,7 @@ $("#plan-auto").onclick=()=>{
 function renderPlan(){
   const e=ev();
   const fitEl=$("#plan-fit");
-  if(!e){fitEl.innerHTML=`<div class="empty">大会を追加してください</div>`;$("#week-grid").innerHTML="";return}
+  if(!e){fitEl.innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;$("#week-grid").innerHTML="";return}
   const koma=komaOf(e);
   if(document.activeElement!==$("#cap-wd"))$("#cap-wd").value=e.capWd!=null?e.capWd:120;
   if(document.activeElement!==$("#cap-we"))$("#cap-we").value=e.capWe!=null?e.capWe:180;
@@ -787,7 +822,7 @@ function renderPlan(){
   // 間に合う?
   const fi=fitInfo(e),left=e.date?daysBetween(today(),e.date):null;
   if(left!=null&&left<0){fitEl.className="fit ok";fitEl.innerHTML="本番は終了しました。おつかれさまでした!";}
-  else if(fi.avail==null){fitEl.className="fit warn";fitEl.innerHTML=`残作業は合計 <b>${fmtMin(fi.rem)}</b>。本番日が未定なので判定できません。「大会を編集」で本番日を設定しましょう。`;}
+  else if(fi.avail==null){fitEl.className="fit warn";fitEl.innerHTML=`残作業は合計 <b>${fmtMin(fi.rem)}</b>。本番日が未定なので判定できません。「プロジェクト編集」で本番日を設定しましょう。`;}
   else{
     const d=fi.diff,cls=d>=120?"ok":d>=0?"warn":"bad",head=d>=120?"余裕あり ✅":d>=0?"ギリギリ間に合う ⚠️":"このままでは足りません 🔥";
     fitEl.className="fit "+cls;
@@ -854,17 +889,99 @@ function renderLogCal(){
   grid.className="calgrid";grid.innerHTML=html;
 }
 
+/* ---------- 今日タイムライン & 振り返り ---------- */
+let selTodayTask=null;
+window.selectTodayTask=id=>{selTodayTask=(selTodayTask===id)?null:id;renderToday()};
+window.hourTap=h=>{
+  const e=ev();if(!e||!selTodayTask)return;
+  const i=e.items.find(x=>x.id===selTodayTask&&x.pct<100);if(!i)return;
+  const ds=today();e.plans=e.plans||[];
+  if(e.plans.find(p=>p.itemId===selTodayTask&&p.date===ds&&p.startHour===h))return;
+  e.plans.push({id:uid(),itemId:selTodayTask,date:ds,min:komaOf(e),startHour:h});
+  save();renderToday();
+};
+window.removeTodaySlot=pid=>{const e=ev();e.plans=(e.plans||[]).filter(p=>p.id!==pid);save();renderToday()};
+window.setEval=(itemId,rating)=>{
+  const e=ev();if(!e)return;
+  const ds=today();e.evals=e.evals||[];
+  const x=e.evals.find(v=>v.date===ds&&v.itemId===itemId);
+  if(x)x.rating=rating;else e.evals.push({id:uid(),date:ds,itemId,rating,note:""});
+  save();renderToday();
+};
+window.setEvalNote=(itemId,note)=>{
+  const e=ev();if(!e)return;
+  const ds=today();e.evals=e.evals||[];
+  const x=e.evals.find(v=>v.date===ds&&v.itemId===itemId);
+  if(x)x.note=note;else e.evals.push({id:uid(),date:ds,itemId,rating:null,note});
+  save();
+};
+function renderToday(){
+  const e=ev();const ds=today();
+  const tld=$("#today-tl-date");if(tld)tld.textContent=ds;
+  if(!e){
+    const tl=$("#today-timeline");if(tl)tl.innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;
+    const el=$("#eval-list");if(el)el.innerHTML="";return;
+  }
+  if(selTodayTask&&!e.items.find(x=>x.id===selTodayTask&&x.pct<100))selTodayTask=null;
+  const openT=e.items.filter(i=>i.pct<100);
+  const pal=$("#today-tl-palette");
+  if(pal)pal.innerHTML=openT.length?openT.map(i=>{
+    const ic=intOf(i);
+    return `<button class="pchip i${ic}${selTodayTask===i.id?" sel":""}" onclick="selectTodayTask('${i.id}')"><span class="pt">${esc(i.title)}</span></button>`;
+  }).join(""):`<div class="empty">未完了タスクがありません</div>`;
+  const selI=openT.find(i=>i.id===selTodayTask);
+  const hint=$("#today-tl-hint");
+  if(hint)hint.innerHTML=selI
+    ?`<b style="color:var(--accent)">「${esc(selI.title)}」を選択中</b> — 下の時間帯をタップして配置　<button class="btn ghost small" onclick="selectTodayTask(null)">解除</button>`
+    :`タスクを選んでから時間帯をタップすると配置できます`;
+  const todayPlans=(e.plans||[]).filter(p=>p.date===ds&&p.startHour!=null);
+  const curH=new Date().getHours();
+  let html=`<div class="timeline">`;
+  for(let h=6;h<=23;h++){
+    const hStr=`${pad(h)}:00`;
+    const slotPs=todayPlans.filter(p=>p.startHour===h);
+    const isNow=h===curH;
+    html+=`<div class="tslot${isNow?" now":""}" onclick="hourTap(${h})">
+      <div class="ttime">${hStr}</div>
+      <div class="ttasks">${slotPs.map(p=>{
+        const it=e.items.find(x=>x.id===p.itemId);const ic=it?intOf(it):2;
+        return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span>${p.min}m</span><span class="x" onclick="event.stopPropagation();removeTodaySlot('${p.id}')">✕</span></div>`;
+      }).join("")}${selTodayTask&&!slotPs.length?`<div class="tslot-add">＋ここに配置</div>`:""}</div>
+    </div>`;
+  }
+  html+=`</div>`;
+  const tl=$("#today-timeline");if(tl)tl.innerHTML=html;
+  const evalItemIds=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
+  const evalItems=evalItemIds.map(id=>e.items.find(x=>x.id===id)).filter(Boolean);
+  e.evals=e.evals||[];
+  const evalsEl=$("#eval-list");if(!evalsEl)return;
+  if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日の計画タスクがあるとここで振り返りできます（プランまたは上のタイムラインで配置）</div>`;return}
+  evalsEl.innerHTML=evalItems.map(i=>{
+    const ev_=e.evals.find(x=>x.date===ds&&x.itemId===i.id);
+    const r=ev_?ev_.rating:null;const note=ev_?ev_.note:"";
+    return `<div class="eval-item">
+      <div class="eval-title">${esc(i.title)}</div>
+      <div class="eval-btns">
+        <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${i.id}','ok')">✅ できた</button>
+        <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${i.id}','so')">△ まあまあ</button>
+        <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${i.id}','ng')">✕ できなかった</button>
+      </div>
+      <input class="eval-note" placeholder="一言メモ（任意）" value="${esc(note)}" onchange="setEvalNote('${i.id}',this.value)">
+    </div>`;
+  }).join("");
+}
+
 /* ---------- header / render ---------- */
 function renderHeader(){
   const sel=$("#ev-select");
   sel.innerHTML=S.events.length?S.events.map(e=>{
     const lbl=e.date?(daysBetween(today(),e.date)>=0?"あと"+daysBetween(today(),e.date)+"日":"終了"):"日程未定";
     return `<option value="${e.id}">${esc(e.name)}(${lbl})</option>`;
-  }).join(""):`<option value="">大会がありません</option>`;
+  }).join(""):`<option value="">プロジェクトがありません</option>`;
   if(S.cur)sel.value=S.cur;
   setSync();
 }
-function renderAll(){renderHeader();renderHome();renderPlan();renderItems();renderLogForm();renderLogCal();renderLogs();renderGear();renderMembers()}
+function renderAll(){renderHeader();renderHome();renderToday();renderPlan();renderItems();renderLogForm();renderLogCal();renderLogs();renderGear();renderMembers()}
 
 /* ---------- 共有 (Google Apps Script Web App + ポーリング) ---------- */
 const GAS_URL="https://script.google.com/macros/s/AKfycbxQp9nO93q_Jb_hCTC1se_Tz7ODRQ42Ru4_AqmCEymxKdi8pok-b1kRWSAFGXE-_2fV/exec"; /* ←Apps Script の /exec URL。これで全員「開くだけ」で共有できます */
@@ -872,7 +989,7 @@ const GASKEY="taikai_gas_url";
 let lastWriteId=null,pushTimer=null,pollTimer=null,gasBusy=false;
 const gasUrl=()=>GAS_URL||localStorage.getItem(GASKEY)||"";
 function normalize(e){
-  e.items=e.items||[];e.logs=e.logs||[];e.gear=e.gear||[];e.plans=e.plans||[];
+  e.items=e.items||[];e.logs=e.logs||[];e.gear=e.gear||[];e.plans=e.plans||[];e.evals=e.evals||[];
   e.capOverrides=e.capOverrides||{};
   if(e.komaMin==null)e.komaMin=60;
   e.items.forEach(i=>{if(i.intensity==null)i.intensity=2});
@@ -960,7 +1077,7 @@ function renderShare(){
 }
 window.startShare=async()=>{
   const e=ev();
-  if(!e)return alert("先に大会を追加してください");
+  if(!e)return alert("先にプロジェクトを追加してください");
   if(!gasUrl())return alert("先に共有サーバー(GAS)のURLを保存してください(モーダル内の手順参照)");
   e.shareCode=e.shareCode||Math.random().toString(36).slice(2,8).toUpperCase();
   localSave();await pushEvent(e);startPolling();
