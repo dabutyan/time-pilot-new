@@ -891,82 +891,98 @@ function renderLogCal(){
 
 /* ---------- 今日タイムライン & 振り返り ---------- */
 let selTodayTask=null;
+const evForItem=itemId=>S.events.find(e=>e.items.some(i=>i.id===itemId))||null;
 window.selectTodayTask=id=>{selTodayTask=(selTodayTask===id)?null:id;renderToday()};
 window.hourTap=h=>{
-  const e=ev();if(!e||!selTodayTask)return;
-  const i=e.items.find(x=>x.id===selTodayTask&&x.pct<100);if(!i)return;
-  const ds=today();e.plans=e.plans||[];
-  if(e.plans.find(p=>p.itemId===selTodayTask&&p.date===ds&&p.startHour===h))return;
-  e.plans.push({id:uid(),itemId:selTodayTask,date:ds,min:komaOf(e),startHour:h});
+  if(!selTodayTask)return;
+  const oe=evForItem(selTodayTask);if(!oe)return;
+  const it=oe.items.find(x=>x.id===selTodayTask&&x.pct<100);if(!it)return;
+  const ds=today();oe.plans=oe.plans||[];
+  if(oe.plans.find(p=>p.itemId===selTodayTask&&p.date===ds&&p.startHour===h))return;
+  oe.plans.push({id:uid(),itemId:selTodayTask,date:ds,min:komaOf(oe),startHour:h});
   save();renderToday();
 };
-window.removeTodaySlot=pid=>{const e=ev();e.plans=(e.plans||[]).filter(p=>p.id!==pid);save();renderToday()};
+window.removeTodaySlot=pid=>{
+  S.events.forEach(e=>{e.plans=(e.plans||[]).filter(p=>p.id!==pid)});
+  save();renderToday();
+};
 window.setEval=(itemId,rating)=>{
-  const e=ev();if(!e)return;
-  const ds=today();e.evals=e.evals||[];
-  const x=e.evals.find(v=>v.date===ds&&v.itemId===itemId);
-  if(x)x.rating=rating;else e.evals.push({id:uid(),date:ds,itemId,rating,note:""});
+  const oe=evForItem(itemId);if(!oe)return;
+  const ds=today();oe.evals=oe.evals||[];
+  const x=oe.evals.find(v=>v.date===ds&&v.itemId===itemId);
+  if(x)x.rating=rating;else oe.evals.push({id:uid(),date:ds,itemId,rating,note:""});
   save();renderToday();
 };
 window.setEvalNote=(itemId,note)=>{
-  const e=ev();if(!e)return;
-  const ds=today();e.evals=e.evals||[];
-  const x=e.evals.find(v=>v.date===ds&&v.itemId===itemId);
-  if(x)x.note=note;else e.evals.push({id:uid(),date:ds,itemId,rating:null,note});
+  const oe=evForItem(itemId);if(!oe)return;
+  const ds=today();oe.evals=oe.evals||[];
+  const x=oe.evals.find(v=>v.date===ds&&v.itemId===itemId);
+  if(x)x.note=note;else oe.evals.push({id:uid(),date:ds,itemId,rating:null,note});
   save();
 };
 function renderToday(){
-  const e=ev();const ds=today();
+  const ds=today();
   const tld=$("#today-tl-date");if(tld)tld.textContent=ds;
-  if(!e){
+  if(!S.events.length){
     const tl=$("#today-timeline");if(tl)tl.innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;
     const el=$("#eval-list");if(el)el.innerHTML="";return;
   }
-  if(selTodayTask&&!e.items.find(x=>x.id===selTodayTask&&x.pct<100))selTodayTask=null;
-  const openT=e.items.filter(i=>i.pct<100);
+  // パレット: 全プロジェクト横断
+  if(selTodayTask&&!evForItem(selTodayTask))selTodayTask=null;
+  const allOpen=[];
+  S.events.forEach(e=>e.items.filter(i=>i.pct<100).forEach(i=>allOpen.push({i,e})));
   const pal=$("#today-tl-palette");
-  if(pal)pal.innerHTML=openT.length?openT.map(i=>{
+  if(pal)pal.innerHTML=allOpen.length?allOpen.map(({i,e})=>{
     const ic=intOf(i);
-    return `<button class="pchip i${ic}${selTodayTask===i.id?" sel":""}" onclick="selectTodayTask('${i.id}')"><span class="pt">${esc(i.title)}</span></button>`;
+    return `<button class="pchip i${ic}${selTodayTask===i.id?" sel":""}" onclick="selectTodayTask('${i.id}')"><span class="pt">${esc(i.title)}</span><span class="pk" style="font-size:10px;opacity:.65">${esc(e.name)}</span></button>`;
   }).join(""):`<div class="empty">未完了タスクがありません</div>`;
-  const selI=openT.find(i=>i.id===selTodayTask);
+  const selEntry=allOpen.find(({i})=>i.id===selTodayTask);
   const hint=$("#today-tl-hint");
-  if(hint)hint.innerHTML=selI
-    ?`<b style="color:var(--accent)">「${esc(selI.title)}」を選択中</b> — 下の時間帯をタップして配置　<button class="btn ghost small" onclick="selectTodayTask(null)">解除</button>`
+  if(hint)hint.innerHTML=selEntry
+    ?`<b style="color:var(--accent)">「${esc(selEntry.i.title)}」を選択中</b> — 下の時間帯をタップして配置　<button class="btn ghost small" onclick="selectTodayTask(null)">解除</button>`
     :`タスクを選んでから時間帯をタップすると配置できます`;
-  const todayPlans=(e.plans||[]).filter(p=>p.date===ds&&p.startHour!=null);
+  // タイムライン: 全プロジェクトのstartHour付きプランを統合
+  const allPlans=[];
+  S.events.forEach(e=>(e.plans||[]).filter(p=>p.date===ds&&p.startHour!=null).forEach(p=>{
+    const it=e.items.find(x=>x.id===p.itemId);
+    allPlans.push({p,it,e});
+  }));
   const curH=new Date().getHours();
   let html=`<div class="timeline">`;
   for(let h=6;h<=23;h++){
     const hStr=`${pad(h)}:00`;
-    const slotPs=todayPlans.filter(p=>p.startHour===h);
+    const slotPs=allPlans.filter(({p})=>p.startHour===h);
     const isNow=h===curH;
     html+=`<div class="tslot${isNow?" now":""}" onclick="hourTap(${h})">
       <div class="ttime">${hStr}</div>
-      <div class="ttasks">${slotPs.map(p=>{
-        const it=e.items.find(x=>x.id===p.itemId);const ic=it?intOf(it):2;
-        return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span>${p.min}m</span><span class="x" onclick="event.stopPropagation();removeTodaySlot('${p.id}')">✕</span></div>`;
+      <div class="ttasks">${slotPs.map(({p,it,e})=>{
+        const ic=it?intOf(it):2;
+        return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span class="muted" style="font-size:10px">${esc(e.name)}</span><span>${p.min}m</span><span class="x" onclick="event.stopPropagation();removeTodaySlot('${p.id}')">✕</span></div>`;
       }).join("")}${selTodayTask&&!slotPs.length?`<div class="tslot-add">＋ここに配置</div>`:""}</div>
     </div>`;
   }
   html+=`</div>`;
   const tl=$("#today-timeline");if(tl)tl.innerHTML=html;
-  const evalItemIds=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
-  const evalItems=evalItemIds.map(id=>e.items.find(x=>x.id===id)).filter(Boolean);
-  e.evals=e.evals||[];
+  // 振り返り: 全プロジェクトの今日計画タスク
+  const evalItems=[];
+  S.events.forEach(e=>{
+    e.evals=e.evals||[];
+    const ids=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
+    ids.forEach(id=>{const it=e.items.find(x=>x.id===id);if(it)evalItems.push({it,e})});
+  });
   const evalsEl=$("#eval-list");if(!evalsEl)return;
   if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日の計画タスクがあるとここで振り返りできます（プランまたは上のタイムラインで配置）</div>`;return}
-  evalsEl.innerHTML=evalItems.map(i=>{
-    const ev_=e.evals.find(x=>x.date===ds&&x.itemId===i.id);
+  evalsEl.innerHTML=evalItems.map(({it,e})=>{
+    const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
     const r=ev_?ev_.rating:null;const note=ev_?ev_.note:"";
     return `<div class="eval-item">
-      <div class="eval-title">${esc(i.title)}</div>
+      <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span></div>
       <div class="eval-btns">
-        <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${i.id}','ok')">✅ できた</button>
-        <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${i.id}','so')">△ まあまあ</button>
-        <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${i.id}','ng')">✕ できなかった</button>
+        <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${it.id}','ok')">✅ できた</button>
+        <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${it.id}','so')">△ まあまあ</button>
+        <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${it.id}','ng')">✕ できなかった</button>
       </div>
-      <input class="eval-note" placeholder="一言メモ（任意）" value="${esc(note)}" onchange="setEvalNote('${i.id}',this.value)">
+      <input class="eval-note" placeholder="一言メモ（任意）" value="${esc(note)}" onchange="setEvalNote('${it.id}',this.value)">
     </div>`;
   }).join("");
 }
