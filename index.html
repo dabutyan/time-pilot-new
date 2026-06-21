@@ -72,12 +72,6 @@ svg.chart{width:100%;height:110px;display:block}
 .log .lt{font-weight:600;white-space:nowrap}
 .log .note{color:var(--sub);flex:1}
 .log .min{white-space:nowrap;color:var(--accent);font-weight:700}
-/* gear */
-.gear{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line)}
-.gear:last-child{border-bottom:none}
-.gear.done span{text-decoration:line-through;color:var(--sub)}
-.gear span{flex:1}
-.gearbar{font-size:12px;color:var(--sub);margin-bottom:8px}
 /* members */
 .member{padding:10px 4px;border-bottom:1px solid var(--line)}
 .member:last-child{border-bottom:none}
@@ -220,7 +214,6 @@ svg.chart{width:100%;height:110px;display:block}
     <button data-v="plan">プラン</button>
     <button data-v="items">準備タスク</button>
     <button data-v="logs">記録</button>
-    <button data-v="gear">持ち物</button>
     <button data-v="members">メンバー</button>
   </nav>
 </header>
@@ -300,7 +293,8 @@ svg.chart{width:100%;height:110px;display:block}
 <!-- 準備タスク -->
 <section id="v-items" class="view">
   <div class="card">
-    <h2>準備タスクを追加 <span class="muted">「何を・いつまでに」</span></h2>
+    <h2>準備タスクを追加 <span class="muted" id="i-target"></span></h2>
+    <div class="muted" style="margin-bottom:8px">上のプロジェクトを切り替えると、追加先が変わります。いろいろなプロジェクトのタスクをここに溜めて、「今日」「週」タブで全体に振り分けます。</div>
     <div class="row">
       <div class="field" style="flex:1;min-width:170px"><label>やること</label><input id="i-title" placeholder="例: 過去問3年分 / プレゼン資料 / 走り込み"></div>
       <div class="field"><label>期限</label><input type="date" id="i-due"></div>
@@ -311,7 +305,7 @@ svg.chart{width:100%;height:110px;display:block}
     </div>
   </div>
   <div class="card">
-    <h2>進行中 <span class="muted">スライダーで達成度を更新</span></h2>
+    <h2>進行中タスク（全プロジェクト） <span class="muted">スライダーで達成度を更新</span></h2>
     <div id="items-open"></div>
   </div>
   <div class="card"><h2>完了(100%)</h2><div id="items-done"></div></div>
@@ -344,19 +338,6 @@ svg.chart{width:100%;height:110px;display:block}
     <div class="muted" style="margin-top:8px">大きい数字＝実績(分)・小さい字＝計画(分)・選択中の日は枠が青</div>
   </div>
   <div class="card"><h2>実績ログ</h2><div id="log-list"></div></div>
-</section>
-
-<!-- 持ち物 -->
-<section id="v-gear" class="view">
-  <div class="card">
-    <h2>持ち物・用意リスト</h2>
-    <div class="gearbar" id="gear-bar"></div>
-    <div class="row">
-      <div class="field" style="flex:1"><label>用意するもの</label><input id="g-name" placeholder="例: 受験票 / ユニフォーム / ポスター印刷"></div>
-      <button class="btn" id="g-add">追加</button>
-    </div>
-    <div id="gear-list" style="margin-top:10px"></div>
-  </div>
 </section>
 
 <!-- メンバー -->
@@ -496,7 +477,7 @@ $("#evm-save").onclick=()=>{
   if(!name)return alert("プロジェクト名を入力してください");
   if(editingEv){editingEv.name=name;editingEv.date=date;editingEv.cat=$("#evm-cat").value}
   else{
-    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],gear:[],members:["自分"],plans:[],evals:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
+    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],members:["自分"],plans:[],evals:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
     S.events.push(e);S.cur=e.id;
   }
   $("#ev-overlay").classList.remove("show");save();renderAll();
@@ -653,14 +634,15 @@ function dueCls(due,pct){
   const l=daysBetween(today(),due);
   return l<0?"over":l<=3?"soon":"";
 }
-function itemHtml(i){
+function itemHtml(i,oe){
   const pcls=i.pct>=70?"hi":i.pct>=30?"mid":"lo";
-  const e=ev();const planned=e?plannedForItem(e,i.id):0;const ic=intOf(i);
+  const planned=plannedForItem(oe,i.id);const ic=intOf(i);
   return `<div class="item ${i.pct>=100?"done100":""}">
     <div class="top">
       <span class="t">${esc(i.title)}</span>
+      <span class="tag" style="background:var(--bg);color:var(--sub)">${esc(oe.name)}</span>
       <span class="ichip i${ic}" onclick="cycleInt('${i.id}')" title="クリックで強度変更(軽→中→重)">強度:${INTLBL[ic]}</span>
-      ${i.owner?`<span class="tag">${esc(i.owner)}</span>`:""}
+      ${i.owner&&i.owner!=="自分"?`<span class="tag">${esc(i.owner)}</span>`:""}
       <span class="due ${dueCls(i.due,i.pct)}">${i.due?`〆${i.due}`:"〆未定"}</span>
       <span class="muted">見込み${i.est}h${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}</span>
       <button class="btn danger small" onclick="delItem('${i.id}')">✕</button>
@@ -675,14 +657,17 @@ function renderItems(){
   const e=ev();
   const ownerSel=$("#i-owner");
   ownerSel.innerHTML=e?e.members.map(m=>`<option>${esc(m)}</option>`).join(""):"";
-  if(!e){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;return}
-  const open=e.items.filter(i=>i.pct<100).sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
-  const done=e.items.filter(i=>i.pct>=100);
-  $("#items-open").innerHTML=open.length?open.map(itemHtml).join(""):`<div class="empty">準備タスクを追加しましょう</div>`;
-  $("#items-done").innerHTML=done.length?done.map(itemHtml).join(""):`<div class="empty">まだありません</div>`;
+  const tgt=$("#i-target");if(tgt)tgt.textContent=e?`→「${e.name}」に追加`:"";
+  if(!S.events.length){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;return}
+  // 全プロジェクト横断のタスクプール
+  const openEntries=[],doneEntries=[];
+  S.events.forEach(oe=>oe.items.forEach(i=>{(i.pct<100?openEntries:doneEntries).push({i,oe})}));
+  openEntries.sort((a,b)=>(a.i.due||"9999")<(b.i.due||"9999")?-1:1);
+  $("#items-open").innerHTML=openEntries.length?openEntries.map(({i,oe})=>itemHtml(i,oe)).join(""):`<div class="empty">準備タスクを追加しましょう</div>`;
+  $("#items-done").innerHTML=doneEntries.length?doneEntries.map(({i,oe})=>itemHtml(i,oe)).join(""):`<div class="empty">まだありません</div>`;
 }
-window.setPct=(id,v)=>{const e=ev();const i=e.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
-window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const e=ev();e.items=e.items.filter(x=>x.id!==id);save();renderAll()};
+window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
+window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);save();renderAll()};
 
 /* ---------- logs ---------- */
 function renderLogForm(){
@@ -717,24 +702,6 @@ function renderLogs(){
   }).join("");
 }
 window.delLog=id=>{const e=ev();e.logs=e.logs.filter(l=>l.id!==id);save();renderAll()};
-
-/* ---------- gear ---------- */
-$("#g-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
-  const n=$("#g-name").value.trim();if(!n)return;
-  e.gear.push({id:uid(),name:n,done:false});$("#g-name").value="";save();renderAll();
-};
-function renderGear(){
-  const e=ev();
-  if(!e){$("#gear-list").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;$("#gear-bar").textContent="";return}
-  const done=e.gear.filter(g=>g.done).length;
-  $("#gear-bar").textContent=e.gear.length?`用意済み ${done}/${e.gear.length}`:"";
-  $("#gear-list").innerHTML=e.gear.length?e.gear.map(g=>
-    `<div class="gear ${g.done?"done":""}"><input type="checkbox" ${g.done?"checked":""} onchange="toggleGear('${g.id}')"><span>${esc(g.name)}</span><button class="btn danger small" onclick="delGear('${g.id}')">✕</button></div>`).join("")
-    :`<div class="empty">受験票、ユニフォーム、提出物の印刷…本番までに用意するものを追加</div>`;
-}
-window.toggleGear=id=>{const g=ev().gear.find(x=>x.id===id);g.done=!g.done;save();renderAll()};
-window.delGear=id=>{const e=ev();e.gear=e.gear.filter(x=>x.id!==id);save();renderAll()};
 
 /* ---------- members ---------- */
 $("#m-add").onclick=()=>{
@@ -865,7 +832,7 @@ function renderPlan(){
 }
 
 /* ---------- 追加機能: 強度 / 日別容量 / 分割 / 記録カレンダー ---------- */
-window.cycleInt=id=>{const e=ev();const i=e.items.find(x=>x.id===id);if(!i)return;i.intensity=(intOf(i)%3)+1;save();renderAll()};
+window.cycleInt=id=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);if(!i)return;i.intensity=(intOf(i)%3)+1;save();renderAll()};
 window.setDayCap=(ds,v)=>{const e=ev();if(!e)return;e.capOverrides=e.capOverrides||{};const n=Math.max(0,+v||0);const base=isWeekend(ds)?(e.capWe||0):(e.capWd||0);if(n===base)delete e.capOverrides[ds];else e.capOverrides[ds]=n;save();renderAll()};
 /* 記録カレンダー */
 let calMonth=null;
@@ -1008,7 +975,7 @@ function renderHeader(){
   if(S.cur)sel.value=S.cur;
   setSync();
 }
-function renderAll(){renderHeader();renderHome();renderToday();renderPlan();renderItems();renderLogForm();renderLogCal();renderLogs();renderGear();renderMembers()}
+function renderAll(){renderHeader();renderHome();renderToday();renderPlan();renderItems();renderLogForm();renderLogCal();renderLogs();renderMembers()}
 
 /* ---------- 共有 (Google Apps Script Web App + ポーリング) ---------- */
 const GAS_URL="https://script.google.com/macros/s/AKfycbxQp9nO93q_Jb_hCTC1se_Tz7ODRQ42Ru4_AqmCEymxKdi8pok-b1kRWSAFGXE-_2fV/exec"; /* ←Apps Script の /exec URL。これで全員「開くだけ」で共有できます */
@@ -1016,7 +983,7 @@ const GASKEY="taikai_gas_url";
 let lastWriteId=null,pushTimer=null,pollTimer=null,gasBusy=false;
 const gasUrl=()=>GAS_URL||localStorage.getItem(GASKEY)||"";
 function normalize(e){
-  e.items=e.items||[];e.logs=e.logs||[];e.gear=e.gear||[];e.plans=e.plans||[];e.evals=e.evals||[];
+  e.items=e.items||[];e.logs=e.logs||[];e.plans=e.plans||[];e.evals=e.evals||[];
   e.capOverrides=e.capOverrides||{};
   if(e.komaMin==null)e.komaMin=60;
   e.items.forEach(i=>{if(i.intensity==null)i.intensity=2});
