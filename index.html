@@ -16,7 +16,9 @@ header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 2
 header h1{font-size:16px;font-weight:800}
 header h1 span{color:var(--accent)}
 #ev-select{font-weight:700;min-width:160px}
-nav{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+nav{display:flex;gap:14px;margin-left:auto;flex-wrap:wrap;align-items:center}
+.nav-group{display:flex;gap:2px}
+.nav-group+.nav-group{padding-left:14px;border-left:1px solid var(--line)}
 nav button{border:none;background:none;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--sub);font-weight:600}
 nav button.active{background:var(--accent-soft);color:var(--accent)}
 main{max-width:1000px;margin:0 auto;padding:18px}
@@ -153,8 +155,10 @@ svg.chart{width:100%;height:110px;display:block}
     position:fixed;bottom:0;left:0;right:0;
     background:var(--card);border-top:2px solid var(--line);
     padding:4px 0 env(safe-area-inset-bottom,6px);
-    margin:0;width:100%;justify-content:space-around;z-index:60;
+    margin:0;width:100%;justify-content:space-between;gap:0;z-index:60;
   }
+  .nav-group{flex:1;justify-content:space-around}
+  .nav-group+.nav-group{padding-left:0}
   nav button{padding:6px 4px;font-size:11px;flex-direction:column;display:flex;align-items:center;flex:1}
   nav button.active{background:transparent;color:var(--accent)}
   main{padding-bottom:68px}
@@ -209,12 +213,15 @@ svg.chart{width:100%;height:110px;display:block}
   <button class="btn ghost small" id="personal-btn">📱 端末同期</button>
   <span class="muted" id="sync-dot"></span>
   <nav>
-    <button data-v="home" class="active">ホーム</button>
-    <button data-v="today">今日</button>
-    <button data-v="plan">プラン</button>
-    <button data-v="items">準備タスク</button>
-    <button data-v="logs">記録</button>
-    <button data-v="members">メンバー</button>
+    <span class="nav-group">
+      <button data-v="home" class="active">ホーム</button>
+      <button data-v="today">今日</button>
+      <button data-v="plan">プラン</button>
+    </span>
+    <span class="nav-group">
+      <button data-v="items">準備タスク</button>
+      <button data-v="members">メンバー</button>
+    </span>
   </nav>
 </header>
 <main>
@@ -261,9 +268,37 @@ svg.chart{width:100%;height:110px;display:block}
     <div id="today-timeline"></div>
   </div>
   <div class="card">
-    <h2>振り返り <span class="muted">今日やったタスクを評価（夜に）</span></h2>
+    <h2>今日の記録・振り返り <span class="muted">やった分数と手応えを記録</span></h2>
     <div id="eval-list"></div>
+    <h3 style="font-size:13px;margin:16px 0 6px;color:var(--sub)">今日のログ</h3>
+    <div id="today-log-list"></div>
   </div>
+  <details class="card">
+    <summary style="cursor:pointer;font-weight:700;font-size:14px">過去の記録・カレンダー（さかのぼって記録）</summary>
+    <div style="margin-top:12px">
+      <div class="row">
+        <div class="field"><label>日付</label><input type="date" id="l-date"></div>
+        <div class="field" style="min-width:160px"><label>準備タスク</label><select id="l-item"></select></div>
+        <div class="field"><label>時間(分)</label><input type="number" id="l-min" min="0" step="5" value="30" style="width:80px"></div>
+        <div class="field"><label>達成度を更新</label><select id="l-pct"></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="field" style="flex:1"><label>メモ(何をどこまでやったか)</label><input id="l-note" placeholder="例: 過去問2019年分を解いた。正答率7割"></div>
+        <button class="btn" id="l-add">記録する</button>
+      </div>
+      <div style="margin-top:16px">
+        <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+          <button class="btn ghost small" id="cal-prev">◀</button>
+          <span id="cal-label" style="font-weight:700"></span>
+          <button class="btn ghost small" id="cal-next">▶</button>
+        </div>
+        <div id="cal-dows" class="caldow"></div>
+        <div id="cal-grid" class="calgrid"></div>
+        <div class="muted" style="margin-top:8px">大きい数字＝実績(分)・小さい字＝計画(分)・選択中の日は枠が青</div>
+      </div>
+      <div style="margin-top:16px"><h3 style="font-size:13px;margin-bottom:6px;color:var(--sub)">実績ログ（全プロジェクト）</h3><div id="log-list"></div></div>
+    </div>
+  </details>
 </section>
 
 <!-- プラン -->
@@ -309,35 +344,6 @@ svg.chart{width:100%;height:110px;display:block}
     <div id="items-open"></div>
   </div>
   <div class="card"><h2>完了(100%)</h2><div id="items-done"></div></div>
-</section>
-
-<!-- 記録 -->
-<section id="v-logs" class="view">
-  <div class="card">
-    <h2>今日の実績を記録</h2>
-    <div class="row">
-      <div class="field"><label>日付</label><input type="date" id="l-date"></div>
-      <div class="field" style="min-width:160px"><label>準備タスク</label><select id="l-item"></select></div>
-      <div class="field"><label>時間(分)</label><input type="number" id="l-min" min="0" step="5" value="30" style="width:80px"></div>
-      <div class="field"><label>達成度を更新</label><select id="l-pct"></select></div>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:1"><label>メモ(何をどこまでやったか)</label><input id="l-note" placeholder="例: 過去問2019年分を解いた。正答率7割"></div>
-      <button class="btn" id="l-add">記録する</button>
-    </div>
-  </div>
-  <div class="card">
-    <h2>カレンダー <span class="muted">日をクリックすると、その日付で記録できます</span></h2>
-    <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
-      <button class="btn ghost small" id="cal-prev">◀</button>
-      <span id="cal-label" style="font-weight:700"></span>
-      <button class="btn ghost small" id="cal-next">▶</button>
-    </div>
-    <div id="cal-dows" class="caldow"></div>
-    <div id="cal-grid" class="calgrid"></div>
-    <div class="muted" style="margin-top:8px">大きい数字＝実績(分)・小さい字＝計画(分)・選択中の日は枠が青</div>
-  </div>
-  <div class="card"><h2>実績ログ</h2><div id="log-list"></div></div>
 </section>
 
 <!-- メンバー -->
@@ -669,39 +675,45 @@ function renderItems(){
 window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
 window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);save();renderAll()};
 
-/* ---------- logs ---------- */
+/* ---------- logs（全プロジェクト横断・過去日も記録可） ---------- */
 function renderLogForm(){
-  const e=ev();
   $("#l-date").value=$("#l-date").value||today();
-  const sel=$("#l-item");const cur=sel.value;
-  sel.innerHTML=`<option value="">(タスクに紐づけない)</option>`+(e?e.items.map(i=>`<option value="${i.id}">${esc(i.title)}(現在${i.pct}%)</option>`).join(""):"");
+  const sel=$("#l-item");if(!sel)return;const cur=sel.value;
+  sel.innerHTML=`<option value="">(タスクに紐づけない)</option>`+
+    S.events.map(e=>e.items.map(i=>`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}・${i.pct}%）</option>`).join("")).join("");
   if([...sel.options].some(o=>o.value===cur))sel.value=cur;
   $("#l-pct").innerHTML=`<option value="">変更しない</option>`+[...Array(21)].map((_,k)=>`<option value="${k*5}">${k*5}%</option>`).join("");
 }
 $("#l-add").onclick=()=>{
-  const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
+  if(!S.events.length)return alert("先にプロジェクトを追加してください");
   const note=$("#l-note").value.trim();
   const min=+$("#l-min").value||0;
   if(!note&&!min)return alert("時間かメモを入力してください");
-  e.logs.push({id:uid(),date:$("#l-date").value||today(),itemId:$("#l-item").value||null,min,note});
+  const itemId=$("#l-item").value||null;
+  const oe=itemId?evForItem(itemId):(ev()||S.events[0]);
+  if(!oe)return;
+  oe.logs=oe.logs||[];
+  oe.logs.push({id:uid(),date:$("#l-date").value||today(),itemId,min,note});
   const np=$("#l-pct").value;
-  if(np!==""&&$("#l-item").value){const i=e.items.find(x=>x.id===$("#l-item").value);if(i){i.pct=+np;if(i.pct>=100)i.doneAt=today()}}
+  if(np!==""&&itemId){const i=oe.items.find(x=>x.id===itemId);if(i){i.pct=+np;if(i.pct>=100)i.doneAt=today()}}
   $("#l-note").value="";$("#l-pct").value="";
   save();renderAll();
 };
 function renderLogs(){
-  const e=ev();
-  if(!e||!e.logs.length){$("#log-list").innerHTML=`<div class="empty">まだ記録がありません。今日やったことを残しましょう</div>`;return}
+  const all=[];
+  S.events.forEach(e=>(e.logs||[]).forEach(l=>all.push({l,e})));
+  const ll=$("#log-list");if(!ll)return;
+  if(!all.length){ll.innerHTML=`<div class="empty">まだ記録がありません。今日やったことを残しましょう</div>`;return}
   const byDate={};
-  e.logs.slice().sort((a,b)=>a.date<b.date?1:-1).forEach(l=>{(byDate[l.date]=byDate[l.date]||[]).push(l)});
-  $("#log-list").innerHTML=Object.entries(byDate).slice(0,30).map(([d,ls])=>{
-    const tot=ls.reduce((s,l)=>s+l.min,0);
+  all.sort((a,b)=>a.l.date<b.l.date?1:-1).forEach(x=>{(byDate[x.l.date]=byDate[x.l.date]||[]).push(x)});
+  ll.innerHTML=Object.entries(byDate).slice(0,30).map(([d,xs])=>{
+    const tot=xs.reduce((s,x)=>s+x.l.min,0);
     return `<div class="logday"><h4>${d}${d===today()?"(今日)":""} — 計${fmtMin(tot)}</h4>`+
-      ls.map(l=>{const i=l.itemId&&e.items.find(x=>x.id===l.itemId);
-        return `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${i?esc(i.title):"その他"}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`}).join("")+`</div>`;
+      xs.map(({l,e})=>{const i=l.itemId&&e.items.find(x=>x.id===l.itemId);
+        return `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${i?esc(i.title):"その他"}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`}).join("")+`</div>`;
   }).join("");
 }
-window.delLog=id=>{const e=ev();e.logs=e.logs.filter(l=>l.id!==id);save();renderAll()};
+window.delLog=id=>{const oe=S.events.find(e=>(e.logs||[]).some(l=>l.id===id));if(!oe)return;oe.logs=oe.logs.filter(l=>l.id!==id);save();renderAll()};
 
 /* ---------- members ---------- */
 $("#m-add").onclick=()=>{
@@ -841,20 +853,22 @@ $("#cal-prev").onclick=()=>{calMonth=calMonth||monthStart(new Date());calMonth.s
 $("#cal-next").onclick=()=>{calMonth=calMonth||monthStart(new Date());calMonth.setMonth(calMonth.getMonth()+1);calMonth=new Date(calMonth);renderLogCal()};
 window.pickLogDate=ds=>{$("#l-date").value=ds;renderLogCal();const n=$("#l-note");if(n)n.focus()};
 function renderLogCal(){
-  const e=ev();const grid=$("#cal-grid");if(!grid)return;
-  if(!e){grid.innerHTML="";$("#cal-label").textContent="";$("#cal-dows").innerHTML="";return}
+  const grid=$("#cal-grid");if(!grid)return;
+  if(!S.events.length){grid.innerHTML="";$("#cal-label").textContent="";$("#cal-dows").innerHTML="";return}
   if(!calMonth)calMonth=monthStart(new Date());
   $("#cal-label").textContent=`${calMonth.getFullYear()}年 ${calMonth.getMonth()+1}月`;
   const dows=["月","火","水","木","金","土","日"];
   $("#cal-dows").innerHTML=dows.map((w,k)=>`<div class="cdw${k===5?" sat":""}${k===6?" sun":""}">${w}</div>`).join("");
   const off=(calMonth.getDay()+6)%7,start=new Date(calMonth);start.setDate(calMonth.getDate()-off);
   const seld=$("#l-date").value||today();
+  const actOf=ds=>S.events.reduce((s,e)=>s+(e.logs||[]).filter(l=>l.date===ds).reduce((a,l)=>a+l.min,0),0);
+  const plOf=ds=>S.events.reduce((s,e)=>s+plannedMin(e,ds),0);
   let html="";
   for(let k=0;k<42;k++){
     const d=new Date(start);d.setDate(start.getDate()+k);const ds=fmtD(d);
     const inM=d.getMonth()===calMonth.getMonth();
-    const act=e.logs.filter(l=>l.date===ds).reduce((s,l)=>s+l.min,0);
-    const pl=plannedMin(e,ds);
+    const act=actOf(ds);
+    const pl=plOf(ds);
     const cls=["cday",inM?"":"out",ds===today()?"today":"",ds===seld?"sel":"",d.getDay()===6?"sat":"",d.getDay()===0?"sun":""].filter(Boolean).join(" ");
     html+=`<div class="${cls}" onclick="pickLogDate('${ds}')"><div class="cn">${d.getDate()}</div>${act?`<div class="cact">${act}</div>`:""}${pl?`<div class="cpl">計${pl}</div>`:""}</div>`;
   }
@@ -941,29 +955,58 @@ function renderToday(){
   }
   html+=`</div>`;
   const tl=$("#today-timeline");if(tl)tl.innerHTML=html;
-  // 振り返り: 全プロジェクトの今日計画タスク
+  // 記録・振り返り: 全プロジェクトの今日計画タスク
   const evalItems=[];
   S.events.forEach(e=>{
     e.evals=e.evals||[];
     const ids=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
     ids.forEach(id=>{const it=e.items.find(x=>x.id===id);if(it)evalItems.push({it,e})});
   });
-  const evalsEl=$("#eval-list");if(!evalsEl)return;
-  if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日の計画タスクがあるとここで振り返りできます（上のタイムラインまたは週タブで配置）</div>`;return}
-  evalsEl.innerHTML=evalItems.map(({it,e})=>{
-    const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
-    const r=ev_?ev_.rating:null;const note=ev_?ev_.note:"";
-    return `<div class="eval-item">
-      <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span></div>
-      <div class="eval-btns">
-        <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${it.id}','ok')">✅ できた</button>
-        <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${it.id}','so')">△ まあまあ</button>
-        <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${it.id}','ng')">✕ できなかった</button>
-      </div>
-      <input class="eval-note" placeholder="一言メモ（任意）" value="${esc(note)}" onchange="setEvalNote('${it.id}',this.value)">
-    </div>`;
-  }).join("");
+  const evalsEl=$("#eval-list");
+  if(evalsEl){
+    if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日やるタスクがあるとここで記録・振り返りできます（上のタイムラインまたは週タブで配置）</div>`;}
+    else evalsEl.innerHTML=evalItems.map(({it,e})=>{
+      const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
+      const r=ev_?ev_.rating:null;
+      const recMin=(e.logs||[]).filter(l=>l.date===ds&&l.itemId===it.id).reduce((s,l)=>s+l.min,0);
+      return `<div class="eval-item">
+        <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span>${recMin?` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">今日 ${fmtMin(recMin)} 記録済</span>`:""}</div>
+        <div class="eval-btns">
+          <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${it.id}','ok')">✅ できた</button>
+          <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${it.id}','so')">△ まあまあ</button>
+          <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${it.id}','ng')">✕ できなかった</button>
+        </div>
+        <div class="slot-form">
+          <span class="muted">実績</span><input id="rec-min-${it.id}" type="number" min="0" step="5" value="30" style="width:60px">分
+          <input id="rec-note-${it.id}" placeholder="メモ（任意）" style="flex:1;min-width:120px">
+          <button class="btn small" onclick="quickLog('${it.id}')">記録</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  // 今日のログ一覧（全プロジェクト）
+  const logEl=$("#today-log-list");
+  if(logEl){
+    const todays=[];
+    S.events.forEach(e=>(e.logs||[]).filter(l=>l.date===ds).forEach(l=>{
+      const it=l.itemId&&e.items.find(x=>x.id===l.itemId);
+      todays.push({l,it,e});
+    }));
+    logEl.innerHTML=todays.length?todays.map(({l,it,e})=>
+      `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${it?esc(it.title):"その他"}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`
+    ).join(""):`<div class="empty">まだ今日の記録はありません</div>`;
+  }
 }
+window.quickLog=itemId=>{
+  const oe=evForItem(itemId);if(!oe)return;
+  const minEl=$("#rec-min-"+itemId),noteEl=$("#rec-note-"+itemId);
+  const min=+(minEl&&minEl.value)||0;
+  const note=((noteEl&&noteEl.value)||"").trim();
+  if(!min&&!note)return alert("時間かメモを入力してください");
+  oe.logs=oe.logs||[];
+  oe.logs.push({id:uid(),date:today(),itemId,min,note});
+  save();renderAll();
+};
 
 /* ---------- header / render ---------- */
 function renderHeader(){
