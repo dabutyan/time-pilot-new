@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TIME PILOT — 大会・コンペ準備マネージャー</title>
+<title>TIME PILOT — プロジェクト準備マネージャー</title>
 <style>
 :root{
   --bg:#f5f6fa; --card:#fff; --ink:#1c2333; --sub:#6b7280; --line:#e5e7eb;
@@ -196,6 +196,14 @@ svg.chart{width:100%;height:110px;display:block}
 .eval-btn.sel-so{background:#fff8e1;border-color:#f59e0b;color:#b45309}
 .eval-btn.sel-ng{background:#fee2e2;border-color:var(--bad);color:var(--bad)}
 .eval-note{border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:13px;width:100%;background:transparent;color:inherit;box-sizing:border-box;margin-top:2px}
+/* 今日: スロット追加フォーム */
+.slot-add-btn{align-self:flex-start;font-size:11px;color:var(--accent);background:var(--accent-soft);border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:600}
+.slot-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:6px}
+.slot-form select{max-width:160px}
+/* 週: 日付タスク選択 */
+.daypick-row{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.daypick-row:last-child{border-bottom:none}
+.daypick-row input{width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -279,18 +287,13 @@ svg.chart{width:100%;height:110px;display:block}
     </div>
   </div>
   <div class="card">
-    <h2>タスクを置く <span class="muted">タスクを選んで、下のカレンダーの日をタップ → 1コマずつ配置</span></h2>
-    <div id="palette" class="palette"></div>
-    <div id="pal-hint" class="muted" style="margin-top:10px"></div>
-  </div>
-  <div class="card">
     <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
       <button class="btn ghost small" id="wk-prev">◀ 前の週</button>
       <span id="wk-label" style="font-weight:700"></span>
       <button class="btn ghost small" id="wk-next">次の週 ▶</button>
     </div>
     <div id="week-grid"></div>
-    <div class="muted" style="margin-top:8px">日をタップ＝選択中タスクを1コマ追加／ブロックの <b>−</b> で1コマ減・<b>✕</b> で全削除／青バー=埋まり具合(赤=オーバー)・下部は実績</div>
+    <div class="muted" style="margin-top:8px">日をタップ＝その日にやるプロジェクト・タスクを大まかに選ぶ（チェックでON/OFF）／ブロックの<b>✕</b>でも削除可／青バー=見込みの埋まり具合・下部は実績</div>
   </div>
 </section>
 
@@ -432,6 +435,18 @@ svg.chart{width:100%;height:110px;display:block}
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:10px">
       <button class="btn ghost small" id="personal-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 日付タスク選択モーダル（週ビュー: 大まかな選択） -->
+<div class="overlay" id="daypick-overlay">
+  <div class="modal">
+    <h3>この日にやるタスクを選ぶ <span class="muted" id="daypick-date"></span></h3>
+    <div class="muted" style="margin-bottom:8px">チェックを入れるとその日の予定に追加されます（時間の細かい配分は「今日」タブで）</div>
+    <div id="daypick-list" style="margin:6px 0;max-height:50vh;overflow:auto"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn small" id="daypick-close">閉じる</button>
     </div>
   </div>
 </div>
@@ -758,36 +773,37 @@ window.delMember=name=>{
 let weekStart=null;
 function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const g=(x.getDay()+6)%7;x.setDate(x.getDate()-g);return x}
 const komaOf=e=>(e&&e.komaMin)||60;
-let selTask=null;
-window.selectTask=id=>{selTask=(selTask===id)?null:id;renderPlan()};
-window.dayTap=ds=>{
-  const e=ev();if(!e)return;
-  if(!selTask)return; // タスク未選択なら何もしない
-  const i=e.items.find(x=>x.id===selTask&&x.pct<100);if(!i)return;
-  const koma=komaOf(e);e.plans=e.plans||[];
-  const b=e.plans.find(p=>p.itemId===selTask&&p.date===ds);
-  if(b)b.min+=koma;else e.plans.push({id:uid(),itemId:selTask,date:ds,min:koma});
+const evForItem=itemId=>S.events.find(e=>e.items.some(i=>i.id===itemId))||null;
+function allOpenTasks(){
+  const out=[];
+  S.events.forEach(e=>e.items.filter(i=>i.pct<100).forEach(i=>out.push({i,e})));
+  return out;
+}
+let dayPickDate=null;
+window.openDayPicker=ds=>{dayPickDate=ds;renderDayPicker();$("#daypick-overlay").classList.add("show")};
+window.toggleDayTask=itemId=>{
+  const oe=evForItem(itemId);if(!oe||!dayPickDate)return;
+  oe.plans=oe.plans||[];
+  if(oe.plans.some(p=>p.itemId===itemId&&p.date===dayPickDate))oe.plans=oe.plans.filter(p=>!(p.itemId===itemId&&p.date===dayPickDate));
+  else oe.plans.push({id:uid(),itemId,date:dayPickDate,min:komaOf(oe)});
+  save();renderDayPicker();renderPlan();
+};
+function renderDayPicker(){
+  const list=$("#daypick-list");if(!list||!dayPickDate)return;
+  $("#daypick-date").textContent=dayPickDate;
+  const allOpen=allOpenTasks();
+  list.innerHTML=allOpen.length?allOpen.map(({i,e})=>{
+    const checked=S.events.some(ev2=>(ev2.plans||[]).some(p=>p.itemId===i.id&&p.date===dayPickDate));
+    return `<label class="daypick-row"><input type="checkbox" ${checked?"checked":""} onchange="toggleDayTask('${i.id}')"><span style="flex:1">${esc(i.title)}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span></label>`;
+  }).join(""):`<div class="empty">未完了タスクがありません</div>`;
+}
+$("#daypick-close").onclick=()=>$("#daypick-overlay").classList.remove("show");
+$("#daypick-overlay").onclick=e=>{if(e.target.id==="daypick-overlay")$("#daypick-overlay").classList.remove("show")};
+window.removeDayTask=(ds,itemId)=>{
+  const oe=evForItem(itemId);if(!oe)return;
+  oe.plans=(oe.plans||[]).filter(p=>!(p.itemId===itemId&&p.date===ds));
   save();renderAll();
 };
-window.unplaceKoma=pid=>{const e=ev();const koma=komaOf(e);const b=(e.plans||[]).find(p=>p.id===pid);if(!b)return;b.min-=koma;if(b.min<=0)e.plans=e.plans.filter(p=>p.id!==pid);save();renderAll()};
-window.fillSelected=()=>{
-  const e=ev();if(!e||!selTask)return;
-  const i=e.items.find(x=>x.id===selTask&&x.pct<100);if(!i)return;
-  const koma=komaOf(e);let need=Math.max(0,remainMin(i)-plannedForItem(e,i.id));
-  if(need<=0)return alert("このタスクは残りがありません");
-  let end=i.due?(()=>{const x=parseD(i.due);x.setDate(x.getDate()+1);return x})():(e.date?parseD(e.date):null);
-  let d=parseD(today()),guard=0,placed=0;
-  while(need>0&&guard++<800){
-    if(end&&d>=end)break;
-    const ds=fmtD(d),free=Math.max(0,dayCap(e,ds)-plannedMin(e,ds));
-    if(free>=koma){const b=e.plans.find(p=>p.itemId===selTask&&p.date===ds);if(b)b.min+=koma;else e.plans.push({id:uid(),itemId:selTask,date:ds,min:koma});need-=koma;placed+=koma;}
-    d.setDate(d.getDate()+1);
-  }
-  save();renderAll();
-  if(placed<=0)alert("空きコマが見つかりませんでした。各日の空き時間や1コマの分数を見直してください");
-  else if(need>0)alert(`${Math.round(placed/koma)}コマ置きました。残りは締切/空きに収まりませんでした`);
-};
-window.delPlan=id=>{const e=ev();e.plans=(e.plans||[]).filter(p=>p.id!==id);save();renderAll()};
 $("#cap-save").onclick=()=>{const e=ev();if(!e)return;e.capWd=+$("#cap-wd").value||0;e.capWe=+$("#cap-we").value||0;e.komaMin=Math.max(5,+$("#cap-koma").value||60);save();renderAll()};
 $("#wk-prev").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()-7);weekStart=new Date(weekStart);renderPlan()};
 $("#wk-next").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()+7);weekStart=new Date(weekStart);renderPlan()};
@@ -808,18 +824,6 @@ function renderPlan(){
   if(document.activeElement!==$("#cap-wd"))$("#cap-wd").value=e.capWd!=null?e.capWd:120;
   if(document.activeElement!==$("#cap-we"))$("#cap-we").value=e.capWe!=null?e.capWe:180;
   if(document.activeElement!==$("#cap-koma"))$("#cap-koma").value=koma;
-  // タスクパレット
-  if(selTask&&!e.items.find(x=>x.id===selTask&&x.pct<100))selTask=null;
-  const openT=e.items.filter(i=>i.pct<100);
-  $("#palette").innerHTML=openT.length?openT.map(i=>{
-    const rem=Math.max(0,remainMin(i)-plannedForItem(e,i.id));
-    const rk=Math.ceil(rem/koma),ic=intOf(i);
-    return `<button class="pchip i${ic}${selTask===i.id?" sel":""}" onclick="selectTask('${i.id}')"><span class="pt">${esc(i.title)}</span><span class="pk">残${rk}コマ</span></button>`;
-  }).join(""):`<div class="empty">未完了タスクがありません。「準備タスク」で追加しましょう</div>`;
-  const selI=openT.find(i=>i.id===selTask);
-  $("#pal-hint").innerHTML=selI
-    ?`<b style="color:var(--accent)">「${esc(selI.title)}」を選択中</b> — カレンダーの日をタップして1コマ置く　<button class="btn ghost small" onclick="fillSelected()">残りをおまかせ配置</button> <button class="btn ghost small" onclick="selectTask(null)">選択解除</button>`
-    :`まず上のタスクを選んでください（1コマ＝${koma}分）`;
   // 間に合う?
   const fi=fitInfo(e),left=e.date?daysBetween(today(),e.date):null;
   if(left!=null&&left<0){fitEl.className="fit ok";fitEl.innerHTML="本番は終了しました。おつかれさまでした!";}
@@ -841,20 +845,20 @@ function renderPlan(){
     const ratio=cap?Math.min(100,pl/cap*100):(pl?100:0),over=cap&&pl>cap;
     const isOv=(e.capOverrides||{})[ds]!=null;
     const capK=Math.floor(cap/koma),plK=Math.round(pl/koma);
-    const cls=["wday",ds===today()?"today":"",k===5?"sat":"",k===6?"sun":"",selTask?"armed":""].filter(Boolean).join(" ");
+    const cls=["wday",ds===today()?"today":"",k===5?"sat":"",k===6?"sun":""].filter(Boolean).join(" ");
     const dayItems={};
-    const blocks=(e.plans||[]).filter(p=>p.date===ds).map(p=>{
-      const it=e.items.find(x=>x.id===p.itemId);const ic=it?intOf(it):2;if(it)dayItems[it.id]=ic;
-      const lbl=p.min%koma===0?`${Math.round(p.min/koma)}コマ`:`${p.min}m`;
-      return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span>${lbl}</span><span class="x" title="1コマ減らす" onclick="event.stopPropagation();unplaceKoma('${p.id}')">−</span><span class="x" title="まるごと削除" onclick="event.stopPropagation();delPlan('${p.id}')">✕</span></div>`;
+    const dayItemIds=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
+    const blocks=dayItemIds.map(id=>{
+      const it=e.items.find(x=>x.id===id);const ic=it?intOf(it):2;if(it)dayItems[id]=ic;
+      return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span class="x" title="削除" onclick="event.stopPropagation();removeDayTask('${ds}','${id}')">✕</span></div>`;
     }).join("");
     const dots=Object.values(dayItems).sort((a,b)=>b-a).map(v=>`<span class="idot i${v}"></span>`).join("");
-    return `<div class="${cls}" onclick="dayTap('${ds}')">
+    return `<div class="${cls}" onclick="openDayPicker('${ds}')">
       <div class="wh"><span>${d.getDate()}<span class="dow"> ${dows[k]}</span></span><span class="pcap">${plK}/${capK}コマ</span></div>
       <div class="caprow">空き<input class="capedit${isOv?" ov":""}" type="number" min="0" step="15" value="${cap}" onclick="event.stopPropagation()" onchange="setDayCap('${ds}',this.value)">分</div>
       <div class="capbar"><div class="${over?"over":""}" style="width:${ratio}%"></div></div>
       ${dots?`<div class="idots" title="強度(タスク別 軽/中/重)">${dots}</div>`:""}
-      ${blocks||`<div class="pcap" style="text-align:center;padding:8px 0">${selTask?"＋タップで置く":"—"}</div>`}
+      ${blocks||`<div class="pcap" style="text-align:center;padding:8px 0">＋タップで選ぶ</div>`}
       ${act?`<div class="pcap">実績 ${fmtMin(act)}</div>`:""}
     </div>`;
   }).join("");
@@ -891,16 +895,16 @@ function renderLogCal(){
 }
 
 /* ---------- 今日タイムライン & 振り返り ---------- */
-let selTodayTask=null;
-const evForItem=itemId=>S.events.find(e=>e.items.some(i=>i.id===itemId))||null;
-window.selectTodayTask=id=>{selTodayTask=(selTodayTask===id)?null:id;renderToday()};
-window.hourTap=h=>{
-  if(!selTodayTask)return;
-  const oe=evForItem(selTodayTask);if(!oe)return;
-  const it=oe.items.find(x=>x.id===selTodayTask&&x.pct<100);if(!it)return;
+let addSlotHour=null;
+window.openSlotAdd=h=>{addSlotHour=(addSlotHour===h)?null:h;renderToday()};
+window.confirmSlotAdd=h=>{
+  const sel=$("#slot-task-"+h),minEl=$("#slot-min-"+h);
+  if(!sel||!sel.value)return;
+  const oe=evForItem(sel.value);if(!oe)return;
+  const min=Math.max(5,+minEl.value||30);
   const ds=today();oe.plans=oe.plans||[];
-  if(oe.plans.find(p=>p.itemId===selTodayTask&&p.date===ds&&p.startHour===h))return;
-  oe.plans.push({id:uid(),itemId:selTodayTask,date:ds,min:komaOf(oe),startHour:h});
+  oe.plans.push({id:uid(),itemId:sel.value,date:ds,min,startHour:h});
+  addSlotHour=null;
   save();renderToday();
 };
 window.removeTodaySlot=pid=>{
@@ -928,20 +932,15 @@ function renderToday(){
     const tl=$("#today-timeline");if(tl)tl.innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;
     const el=$("#eval-list");if(el)el.innerHTML="";return;
   }
-  // パレット: 全プロジェクト横断
-  if(selTodayTask&&!evForItem(selTodayTask))selTodayTask=null;
-  const allOpen=[];
-  S.events.forEach(e=>e.items.filter(i=>i.pct<100).forEach(i=>allOpen.push({i,e})));
+  // パレット: 全プロジェクト横断の一覧（見るだけ。配置は各時間帯の「＋追加」から）
+  const allOpen=allOpenTasks();
   const pal=$("#today-tl-palette");
   if(pal)pal.innerHTML=allOpen.length?allOpen.map(({i,e})=>{
     const ic=intOf(i);
-    return `<button class="pchip i${ic}${selTodayTask===i.id?" sel":""}" onclick="selectTodayTask('${i.id}')"><span class="pt">${esc(i.title)}</span><span class="pk" style="font-size:10px;opacity:.65">${esc(e.name)}</span></button>`;
+    return `<div class="pchip i${ic}"><span class="pt">${esc(i.title)}</span><span class="pk" style="font-size:10px;opacity:.65">${esc(e.name)}</span></div>`;
   }).join(""):`<div class="empty">未完了タスクがありません</div>`;
-  const selEntry=allOpen.find(({i})=>i.id===selTodayTask);
   const hint=$("#today-tl-hint");
-  if(hint)hint.innerHTML=selEntry
-    ?`<b style="color:var(--accent)">「${esc(selEntry.i.title)}」を選択中</b> — 下の時間帯をタップして配置　<button class="btn ghost small" onclick="selectTodayTask(null)">解除</button>`
-    :`タスクを選んでから時間帯をタップすると配置できます`;
+  if(hint)hint.innerHTML=`下の時間帯の「＋ 追加」をタップして、タスクと時間(分)を選んでください`;
   // タイムライン: 全プロジェクトのstartHour付きプランを統合
   const allPlans=[];
   S.events.forEach(e=>(e.plans||[]).filter(p=>p.date===ds&&p.startHour!=null).forEach(p=>{
@@ -954,12 +953,23 @@ function renderToday(){
     const hStr=`${pad(h)}:00`;
     const slotPs=allPlans.filter(({p})=>p.startHour===h);
     const isNow=h===curH;
-    html+=`<div class="tslot${isNow?" now":""}" onclick="hourTap(${h})">
+    const formOpen=addSlotHour===h;
+    let formHtml="";
+    if(formOpen){
+      const opts=allOpen.map(({i,e})=>`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}）</option>`).join("");
+      formHtml=`<div class="slot-form">
+        <select id="slot-task-${h}">${opts||'<option value="">タスクがありません</option>'}</select>
+        <input id="slot-min-${h}" type="number" min="5" step="5" value="30" style="width:60px">分
+        <button class="btn small" onclick="confirmSlotAdd(${h})">追加</button>
+        <button class="btn ghost small" onclick="openSlotAdd(${h})">キャンセル</button>
+      </div>`;
+    }
+    html+=`<div class="tslot${isNow?" now":""}">
       <div class="ttime">${hStr}</div>
       <div class="ttasks">${slotPs.map(({p,it,e})=>{
         const ic=it?intOf(it):2;
-        return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span class="muted" style="font-size:10px">${esc(e.name)}</span><span>${p.min}m</span><span class="x" onclick="event.stopPropagation();removeTodaySlot('${p.id}')">✕</span></div>`;
-      }).join("")}${selTodayTask&&!slotPs.length?`<div class="tslot-add">＋ここに配置</div>`:""}</div>
+        return `<div class="pblock i${ic}"><span class="pt">${it?esc(it.title):"(削除済)"}</span><span class="muted" style="font-size:10px">${esc(e.name)}</span><span>${p.min}m</span><span class="x" onclick="removeTodaySlot('${p.id}')">✕</span></div>`;
+      }).join("")}${formHtml}${!formOpen?`<button class="slot-add-btn" onclick="openSlotAdd(${h})">＋ 追加</button>`:""}</div>
     </div>`;
   }
   html+=`</div>`;
@@ -972,7 +982,7 @@ function renderToday(){
     ids.forEach(id=>{const it=e.items.find(x=>x.id===id);if(it)evalItems.push({it,e})});
   });
   const evalsEl=$("#eval-list");if(!evalsEl)return;
-  if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日の計画タスクがあるとここで振り返りできます（プランまたは上のタイムラインで配置）</div>`;return}
+  if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日の計画タスクがあるとここで振り返りできます（上のタイムラインまたは週タブで配置）</div>`;return}
   evalsEl.innerHTML=evalItems.map(({it,e})=>{
     const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
     const r=ev_?ev_.rating:null;const note=ev_?ev_.note:"";
@@ -1088,7 +1098,7 @@ function renderShare(){
   $("#fb-status").textContent=url?(GAS_URL?"✅ 共有サーバー設定済み(このファイルに埋め込み済み)":"✅ 共有サーバーURL 保存済み"):"未設定 — 下の手順でGASのURLを用意して貼り付けてください";
   if(!GAS_URL&&url&&!$("#fb-cfg").value)$("#fb-cfg").value=url;
   const e=ev();
-  $("#share-cur").innerHTML=!e?`<span class="muted">大会がありません</span>`
+  $("#share-cur").innerHTML=!e?`<span class="muted">プロジェクトがありません</span>`
     :e.shareCode?`「${esc(e.name)}」を共有中 — コード: <b style="font-size:16px">${e.shareCode}</b><br><span class="muted">メンバーはこのコードで「参加」すると同じデータを編集できます(数秒ごとに同期)</span><br><button class="btn danger small" onclick="stopShare()" style="margin-top:6px">この端末での共有を停止</button>`
     :`「${esc(e.name)}」はまだ共有されていません<br><button class="btn small" onclick="startShare()" style="margin-top:6px">共有を開始してコードを発行</button>`;
 }
@@ -1122,7 +1132,7 @@ async function pushPersonal(){
 function renderPersonalSync(){
   const el=$("#personal-status");if(!el)return;
   if(S.personalCode){
-    el.innerHTML=`✅ 同期中 — コード: <b style="font-size:20px;letter-spacing:3px;color:var(--accent)">${S.personalCode}</b><br><span class="muted">スマホでも「📱 端末同期」→ 同じコードを入力 →「同期を開始」すると全大会が同期されます</span><br><button class="btn danger small" onclick="stopPersonalSync()" style="margin-top:8px">同期を停止</button>`;
+    el.innerHTML=`✅ 同期中 — コード: <b style="font-size:20px;letter-spacing:3px;color:var(--accent)">${S.personalCode}</b><br><span class="muted">スマホでも「📱 端末同期」→ 同じコードを入力 →「同期を開始」すると全プロジェクトが同期されます</span><br><button class="btn danger small" onclick="stopPersonalSync()" style="margin-top:8px">同期を停止</button>`;
     const inp=$("#personal-code-input");if(inp)inp.value=S.personalCode;
   }else{
     el.innerHTML=`<span class="muted">未設定 — コードを入力(空欄なら自動発行)して「同期を開始」</span>`;
