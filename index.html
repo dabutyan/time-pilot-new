@@ -67,6 +67,19 @@ svg.chart{width:100%;height:110px;display:block}
 .item input[type=range]{flex:1;accent-color:var(--accent)}
 .pct{font-weight:800;width:46px;text-align:right}
 .pct.lo{color:var(--bad)}.pct.mid{color:var(--warn)}.pct.hi{color:var(--ok)}
+/* subtasks */
+.subs{display:flex;flex-direction:column;gap:2px;margin:6px 0 0 2px}
+.sub{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}
+.sub input[type=checkbox]{width:15px;height:15px;flex:none}
+.sub.done .st{text-decoration:line-through;color:var(--sub)}
+.sub .st{flex:1}
+.sub-add{display:flex;gap:6px;margin-top:5px}
+.sub-add input{flex:1;font-size:12px;padding:4px 8px}
+.sub-toggle{font-size:11px;color:var(--accent);cursor:pointer;background:none;border:none;padding:2px 0;font-weight:600}
+/* 見積り精度 */
+.acc{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+.acc .v{font-size:24px;font-weight:800}
+.acc .v.over{color:var(--bad)}.acc .v.under{color:var(--ok)}
 /* logs */
 .logday{margin-bottom:12px}
 .logday h4{font-size:12px;color:var(--sub);margin-bottom:6px;border-bottom:1px solid var(--line);padding-bottom:4px}
@@ -216,7 +229,7 @@ svg.chart{width:100%;height:110px;display:block}
     <span class="nav-group">
       <button data-v="home" class="active">ホーム</button>
       <button data-v="today">今日</button>
-      <button data-v="plan">プラン</button>
+      <button data-v="plan">週</button>
     </span>
     <span class="nav-group">
       <button data-v="items">準備タスク</button>
@@ -339,8 +352,12 @@ svg.chart{width:100%;height:110px;display:block}
       <button class="btn" id="i-add">追加</button>
     </div>
   </div>
+  <div class="card" id="acc-card" style="display:none">
+    <h2>📏 見積りの精度 <span class="muted">完了タスクの「実績 ÷ 見込み」から学習</span></h2>
+    <div id="acc-body"></div>
+  </div>
   <div class="card">
-    <h2>進行中タスク（全プロジェクト） <span class="muted">スライダーで達成度を更新</span></h2>
+    <h2>進行中タスク（全プロジェクト） <span class="muted">チェックリスト or スライダーで達成度</span></h2>
     <div id="items-open"></div>
   </div>
   <div class="card"><h2>完了(100%)</h2><div id="items-done"></div></div>
@@ -419,6 +436,14 @@ svg.chart{width:100%;height:110px;display:block}
         <input id="personal-code-input" placeholder="例: MYCODE" style="text-transform:uppercase;width:150px" maxlength="16">
       </div>
       <button class="btn small" onclick="startPersonalSync()">同期を開始</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
+    <h3 style="font-size:14px">💾 バックアップ</h3>
+    <p class="muted" style="margin-bottom:8px">全データをファイルに書き出し／読み込みできます。万一のときの保険に。</p>
+    <div class="row">
+      <button class="btn ghost small" onclick="exportData()">⬇ 書き出し（バックアップ）</button>
+      <button class="btn ghost small" onclick="document.getElementById('import-file').click()">⬆ 読み込み（復元）</button>
+      <input type="file" id="import-file" accept="application/json,.json" style="display:none" onchange="importData(this)">
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:10px">
       <button class="btn ghost small" id="personal-close">閉じる</button>
@@ -530,6 +555,11 @@ const estMinOf=i=>i.estMin!=null?i.estMin:Math.round((i.est||1)*60);
 function remainMin(i){return Math.max(0,Math.round(estMinOf(i)*(1-(i.pct||0)/100)))}
 function plannedMin(e,ds){return (e.plans||[]).filter(p=>p.date===ds).reduce((s,p)=>s+(p.min||0),0)}
 function plannedForItem(e,id){return (e.plans||[]).filter(p=>p.itemId===id).reduce((s,p)=>s+(p.min||0),0)}
+function actualForItem(e,id){return (e.logs||[]).filter(l=>l.itemId===id).reduce((s,l)=>s+(l.min||0),0)}
+/* サブタスク: ある場合は達成度を完了率から自動算出 */
+function recalcSubPct(i){if(Array.isArray(i.subs)&&i.subs.length){i.pct=Math.round(i.subs.filter(s=>s.done).length/i.subs.length*100);if(i.pct>=100)i.doneAt=today()}}
+/* 見積り精度: 完了タスクの実績÷見込み */
+function estAccuracy(){let estSum=0,actSum=0,n=0;S.events.forEach(e=>e.items.filter(i=>i.pct>=100).forEach(i=>{const a=actualForItem(e,i.id);if(a>0){estSum+=estMinOf(i);actSum+=a;n++}}));return(n&&estSum)?{ratio:actSum/estSum,n,estSum,actSum}:null}
 function fitInfo(e){
   const rem=e.items.filter(i=>i.pct<100).reduce((s,i)=>s+remainMin(i),0);
   if(!e.date)return{rem,avail:null,diff:null};
@@ -602,7 +632,7 @@ function renderHome(){
   $("#today-plan").innerHTML=tplans.length?tplans.map(p=>{
     const it=e.items.find(x=>x.id===p.itemId);
     return `<div class="todo"><span class="tt">${it?esc(it.title):"(削除されたタスク)"}</span><span class="tm">${p.min}分</span></div>`;
-  }).join(""):`<div class="empty">今日の計画はまだありません。<button class="btn ghost small" onclick="gotoPlan()">プランで割り付ける</button></div>`;
+  }).join(""):`<div class="empty">今日の計画はまだありません。<button class="btn ghost small" onclick="gotoPlan()">週ビューで割り付ける</button></div>`;
   const risks=riskItems(e);
   $("#h-risks").innerHTML=risks.length?risks.slice(0,6).map(({i,left})=>
     `<div class="risk" onclick="gotoItems()">${left<0?`期限を${-left}日超過`:`残り${left}日`} / 達成${i.pct}% — <b>${esc(i.title)}</b>${i.owner?`(${esc(i.owner)})`:""}</div>`).join("")
@@ -645,6 +675,24 @@ function dueCls(due,pct){
 function itemHtml(i,oe){
   const pcls=i.pct>=70?"hi":i.pct>=30?"mid":"lo";
   const planned=plannedForItem(oe,i.id);const ic=intOf(i);
+  const actual=actualForItem(oe,i.id);
+  const ratio=(i.pct>=100&&actual>0)?actual/estMinOf(i):null;
+  const subMode=Array.isArray(i.subs);
+  let ctl;
+  if(subMode){
+    const subs=i.subs,done=subs.filter(s=>s.done).length;
+    ctl=`<div class="subs">
+      ${subs.map(s=>`<label class="sub ${s.done?"done":""}"><input type="checkbox" ${s.done?"checked":""} onchange="toggleSub('${i.id}','${s.id}')"><span class="st">${esc(s.title)}</span><button class="btn danger small" onclick="delSub('${i.id}','${s.id}')">✕</button></label>`).join("")}
+      <div class="sub-add"><input id="subadd-${i.id}" placeholder="サブタスクを追加（例: 2019年分）" onkeydown="if(event.key==='Enter')addSub('${i.id}')"><button class="btn ghost small" onclick="addSub('${i.id}')">＋追加</button></div>
+      <div class="muted" style="margin-top:4px">${subs.length?`完了 ${done}/${subs.length} → 達成度 <b class="${pcls}">${i.pct}%</b>（自動）`:`サブタスクを追加すると達成度が自動計算されます`} <button class="sub-toggle" onclick="removeSubs('${i.id}')">スライダーに戻す</button></div>
+    </div>`;
+  }else{
+    ctl=`<div class="ctl">
+      <input type="range" min="0" max="100" step="1" value="${i.pct}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setPct('${i.id}',this.value)">
+      <span class="pct ${pcls}">${i.pct}%</span>
+    </div>
+    <button class="sub-toggle" onclick="startSubs('${i.id}')">＋ サブタスクに分けて管理</button>`;
+  }
   return `<div class="item ${i.pct>=100?"done100":""}">
     <div class="top">
       <span class="t">${esc(i.title)}</span>
@@ -652,13 +700,10 @@ function itemHtml(i,oe){
       <span class="ichip i${ic}" onclick="cycleInt('${i.id}')" title="クリックで強度変更(軽→中→重)">強度:${INTLBL[ic]}</span>
       ${i.owner&&i.owner!=="自分"?`<span class="tag">${esc(i.owner)}</span>`:""}
       <span class="due ${dueCls(i.due,i.pct)}">${i.due?`〆${i.due}`:"〆未定"}</span>
-      <span class="muted">見込み${fmtMin(estMinOf(i))}${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}</span>
+      <span class="muted">見込み${fmtMin(estMinOf(i))}${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}${actual>0?` / 実績${fmtMin(actual)}${ratio?`（見込み比 ${ratio.toFixed(1)}x）`:""}`:""}</span>
       <button class="btn danger small" onclick="delItem('${i.id}')">✕</button>
     </div>
-    <div class="ctl">
-      <input type="range" min="0" max="100" step="1" value="${i.pct}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setPct('${i.id}',this.value)">
-      <span class="pct ${pcls}">${i.pct}%</span>
-    </div>
+    ${ctl}
   </div>`;
 }
 function renderItems(){
@@ -666,6 +711,18 @@ function renderItems(){
   const ownerSel=$("#i-owner");
   ownerSel.innerHTML=e?e.members.map(m=>`<option>${esc(m)}</option>`).join(""):"";
   const tgt=$("#i-target");if(tgt)tgt.textContent=e?`→「${e.name}」に追加`:"";
+  // 見積り精度カード
+  const acc=estAccuracy(),card=$("#acc-card"),body=$("#acc-body");
+  if(card&&body){
+    if(acc){
+      card.style.display="block";
+      const r=acc.ratio,cls=r>1.15?"over":r<0.85?"under":"";
+      const msg=r>1.15?`見込みより<b>${Math.round((r-1)*100)}%多く</b>かかる傾向。新しい見込みは <b>${r.toFixed(1)}倍</b>を目安に盛りましょう。`
+        :r<0.85?`見込みより<b>${Math.round((1-r)*100)}%早く</b>終わる傾向。少し強気の見積もりでOK。`
+        :`見込みと実績はほぼ一致。良い精度です 👍`;
+      body.innerHTML=`<div class="acc"><div><div class="v ${cls}">${r.toFixed(2)}<span style="font-size:13px"> 倍</span></div><div class="muted">実績 ${fmtMin(acc.actSum)} ÷ 見込み ${fmtMin(acc.estSum)}（完了${acc.n}件）</div></div><div class="muted" style="flex:1;min-width:160px;line-height:1.7">${msg}</div></div>`;
+    }else card.style.display="none";
+  }
   if(!S.events.length){$("#items-open").innerHTML=$("#items-done").innerHTML=`<div class="empty">プロジェクトを追加してください</div>`;return}
   // 全プロジェクト横断のタスクプール
   const openEntries=[],doneEntries=[];
@@ -676,6 +733,13 @@ function renderItems(){
 }
 window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
 window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);save();renderAll()};
+/* サブタスク操作 */
+function findItem(id){const oe=evForItem(id);return oe?oe.items.find(x=>x.id===id):null}
+window.startSubs=id=>{const i=findItem(id);if(!i)return;i.subs=i.subs||[];save();renderAll();const inp=$("#subadd-"+id);if(inp)inp.focus()};
+window.removeSubs=id=>{const i=findItem(id);if(!i)return;if(i.subs&&i.subs.length&&!confirm("サブタスクを消してスライダー管理に戻しますか?"))return;delete i.subs;save();renderAll()};
+window.addSub=id=>{const i=findItem(id);if(!i)return;const inp=$("#subadd-"+id);const t=inp?inp.value.trim():"";if(!t)return;i.subs=i.subs||[];i.subs.push({id:uid(),title:t,done:false});recalcSubPct(i);save();renderAll();const n=$("#subadd-"+id);if(n)n.focus()};
+window.toggleSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;const s=i.subs.find(x=>x.id===sid);if(!s)return;s.done=!s.done;recalcSubPct(i);save();renderAll()};
+window.delSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;i.subs=i.subs.filter(x=>x.id!==sid);recalcSubPct(i);save();renderAll()};
 
 /* ---------- logs（全プロジェクト横断・過去日も記録可） ---------- */
 function renderLogForm(){
@@ -1195,6 +1259,34 @@ $("#join-btn").onclick=async()=>{
     $("#share-overlay").classList.remove("show");
     renderAll();
   }catch(err){alert("参加に失敗しました: "+err.message)}
+};
+/* ---------- バックアップ / 復元 ---------- */
+window.exportData=()=>{
+  const payload={app:"TIME PILOT",version:1,exportedAt:new Date().toISOString(),events:S.events};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=`timepilot-backup-${today()}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+window.importData=inp=>{
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      const evs=Array.isArray(data)?data:data.events;
+      if(!Array.isArray(evs))throw new Error("形式が違います");
+      if(!confirm(`バックアップを読み込みます。\nプロジェクト ${evs.length}件 で現在のデータを置き換えます。よろしいですか?`)){inp.value="";return}
+      S.events=evs.map(normalize);
+      if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
+      save();renderAll();
+      alert("読み込みました ✅");
+    }catch(err){alert("読み込みに失敗しました: "+err.message)}
+    inp.value="";
+  };
+  reader.readAsText(f);
 };
 // 起動時: 共有中の大会 or 個人同期コードがあれば自動でポーリング開始
 if(gasUrl()&&(S.events.some(e=>e.shareCode)||S.personalCode))startPolling();
