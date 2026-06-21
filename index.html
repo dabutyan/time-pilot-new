@@ -279,8 +279,8 @@ svg.chart{width:100%;height:110px;display:block}
       <div class="row">
         <div class="field"><label>日付</label><input type="date" id="l-date"></div>
         <div class="field" style="min-width:160px"><label>準備タスク</label><select id="l-item"></select></div>
-        <div class="field"><label>時間(分)</label><input type="number" id="l-min" min="0" step="5" value="30" style="width:80px"></div>
-        <div class="field"><label>達成度を更新</label><select id="l-pct"></select></div>
+        <div class="field"><label>時間(分)</label><input type="number" id="l-min" min="0" step="1" value="30" style="width:80px"></div>
+        <div class="field"><label>達成度を更新(%)</label><input type="number" id="l-pct" min="0" max="100" step="1" placeholder="変更しない" style="width:100px"></div>
       </div>
       <div class="row" style="margin-top:8px">
         <div class="field" style="flex:1"><label>メモ(何をどこまでやったか)</label><input id="l-note" placeholder="例: 過去問2019年分を解いた。正答率7割"></div>
@@ -333,7 +333,7 @@ svg.chart{width:100%;height:110px;display:block}
     <div class="row">
       <div class="field" style="flex:1;min-width:170px"><label>やること</label><input id="i-title" placeholder="例: 過去問3年分 / プレゼン資料 / 走り込み"></div>
       <div class="field"><label>期限</label><input type="date" id="i-due"></div>
-      <div class="field"><label>見込み(時間)</label><input type="number" id="i-est" min="0.5" step="0.5" value="2" style="width:80px"></div>
+      <div class="field"><label>見込み(分)</label><input type="number" id="i-est" min="1" step="1" value="60" style="width:80px"></div>
       <div class="field"><label>強度</label><select id="i-int"><option value="1">軽</option><option value="2" selected>中</option><option value="3">重</option></select></div>
       <div class="field"><label>担当</label><select id="i-owner"></select></div>
       <button class="btn" id="i-add">追加</button>
@@ -499,7 +499,7 @@ $("#ev-select").onchange=()=>{S.cur=$("#ev-select").value;localSave();renderAll(
 function overallPct(e){
   if(!e.items.length)return 0;
   let w=0,s=0;
-  e.items.forEach(i=>{const wt=i.est||1;w+=wt;s+=wt*i.pct});
+  e.items.forEach(i=>{const wt=estMinOf(i);w+=wt;s+=wt*i.pct});
   return w?Math.round(s/w):0;
 }
 function expectedPct(e){
@@ -525,7 +525,9 @@ const isWeekend=ds=>{const d=parseD(ds).getDay();return d===0||d===6};
 function dayCap(e,ds){const o=(e.capOverrides||{})[ds];return o!=null?o:(isWeekend(ds)?(e.capWe||0):(e.capWd||0))}
 const intOf=i=>(i&&i.intensity)||2;
 const INTLBL={1:"軽",2:"中",3:"重"};
-function remainMin(i){return Math.max(0,Math.round((i.est||1)*60*(1-(i.pct||0)/100)))}
+/* 見込み時間は分で保持(estMin)。旧データ(est=時間)は分に換算 */
+const estMinOf=i=>i.estMin!=null?i.estMin:Math.round((i.est||1)*60);
+function remainMin(i){return Math.max(0,Math.round(estMinOf(i)*(1-(i.pct||0)/100)))}
 function plannedMin(e,ds){return (e.plans||[]).filter(p=>p.date===ds).reduce((s,p)=>s+(p.min||0),0)}
 function plannedForItem(e,id){return (e.plans||[]).filter(p=>p.itemId===id).reduce((s,p)=>s+(p.min||0),0)}
 function fitInfo(e){
@@ -632,7 +634,7 @@ $("#i-add").onclick=()=>{
   const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const title=$("#i-title").value.trim();
   if(!title)return alert("やることを入力してください");
-  e.items.push({id:uid(),title,due:$("#i-due").value||e.date,est:+$("#i-est").value||1,owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()});
+  e.items.push({id:uid(),title,due:$("#i-due").value||e.date,estMin:Math.max(1,+$("#i-est").value||60),owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()});
   $("#i-title").value="";save();renderAll();
 };
 function dueCls(due,pct){
@@ -650,11 +652,11 @@ function itemHtml(i,oe){
       <span class="ichip i${ic}" onclick="cycleInt('${i.id}')" title="クリックで強度変更(軽→中→重)">強度:${INTLBL[ic]}</span>
       ${i.owner&&i.owner!=="自分"?`<span class="tag">${esc(i.owner)}</span>`:""}
       <span class="due ${dueCls(i.due,i.pct)}">${i.due?`〆${i.due}`:"〆未定"}</span>
-      <span class="muted">見込み${i.est}h${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}</span>
+      <span class="muted">見込み${fmtMin(estMinOf(i))}${i.pct<100?` / 残り${fmtMin(remainMin(i))} / 計画済み${fmtMin(planned)}`:""}</span>
       <button class="btn danger small" onclick="delItem('${i.id}')">✕</button>
     </div>
     <div class="ctl">
-      <input type="range" min="0" max="100" step="5" value="${i.pct}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setPct('${i.id}',this.value)">
+      <input type="range" min="0" max="100" step="1" value="${i.pct}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setPct('${i.id}',this.value)">
       <span class="pct ${pcls}">${i.pct}%</span>
     </div>
   </div>`;
@@ -682,7 +684,6 @@ function renderLogForm(){
   sel.innerHTML=`<option value="">(タスクに紐づけない)</option>`+
     S.events.map(e=>e.items.map(i=>`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}・${i.pct}%）</option>`).join("")).join("");
   if([...sel.options].some(o=>o.value===cur))sel.value=cur;
-  $("#l-pct").innerHTML=`<option value="">変更しない</option>`+[...Array(21)].map((_,k)=>`<option value="${k*5}">${k*5}%</option>`).join("");
 }
 $("#l-add").onclick=()=>{
   if(!S.events.length)return alert("先にプロジェクトを追加してください");
@@ -728,7 +729,7 @@ function renderMembers(){
   $("#member-list").innerHTML=e.members.map(m=>{
     const items=e.items.filter(i=>i.owner===m);
     const open=items.filter(i=>i.pct<100);
-    let w=0,s=0;items.forEach(i=>{const wt=i.est||1;w+=wt;s+=wt*i.pct});
+    let w=0,s=0;items.forEach(i=>{const wt=estMinOf(i);w+=wt;s+=wt*i.pct});
     const p=w?Math.round(s/w):null;
     const mins=e.logs.filter(l=>{const i=l.itemId&&e.items.find(x=>x.id===l.itemId);return i&&i.owner===m}).reduce((sm,l)=>sm+l.min,0);
     return `<div class="member">
@@ -940,7 +941,7 @@ function renderToday(){
       const opts=allOpen.map(({i,e})=>`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}）</option>`).join("");
       formHtml=`<div class="slot-form">
         <select id="slot-task-${h}">${opts||'<option value="">タスクがありません</option>'}</select>
-        <input id="slot-min-${h}" type="number" min="5" step="5" value="30" style="width:60px">分
+        <input id="slot-min-${h}" type="number" min="1" step="1" value="30" style="width:60px">分
         <button class="btn small" onclick="confirmSlotAdd(${h})">追加</button>
         <button class="btn ghost small" onclick="openSlotAdd(${h})">キャンセル</button>
       </div>`;
@@ -969,15 +970,17 @@ function renderToday(){
       const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
       const r=ev_?ev_.rating:null;
       const recMin=(e.logs||[]).filter(l=>l.date===ds&&l.itemId===it.id).reduce((s,l)=>s+l.min,0);
+      const planMin=(e.plans||[]).filter(p=>p.date===ds&&p.itemId===it.id).reduce((s,p)=>s+(p.min||0),0);
+      const defMin=planMin||30;
       return `<div class="eval-item">
-        <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span>${recMin?` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">今日 ${fmtMin(recMin)} 記録済</span>`:""}</div>
+        <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span>${planMin?` <span class="muted" style="font-size:11px">予定${fmtMin(planMin)}</span>`:""}${recMin?` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">今日 ${fmtMin(recMin)} 記録済</span>`:""}</div>
         <div class="eval-btns">
           <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${it.id}','ok')">✅ できた</button>
           <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${it.id}','so')">△ まあまあ</button>
           <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${it.id}','ng')">✕ できなかった</button>
         </div>
         <div class="slot-form">
-          <span class="muted">実績</span><input id="rec-min-${it.id}" type="number" min="0" step="5" value="30" style="width:60px">分
+          <span class="muted">実績</span><input id="rec-min-${it.id}" type="number" min="0" step="1" value="${defMin}" style="width:64px">分
           <input id="rec-note-${it.id}" placeholder="メモ（任意）" style="flex:1;min-width:120px">
           <button class="btn small" onclick="quickLog('${it.id}')">記録</button>
         </div>
@@ -1029,7 +1032,7 @@ function normalize(e){
   e.items=e.items||[];e.logs=e.logs||[];e.plans=e.plans||[];e.evals=e.evals||[];
   e.capOverrides=e.capOverrides||{};
   if(e.komaMin==null)e.komaMin=60;
-  e.items.forEach(i=>{if(i.intensity==null)i.intensity=2});
+  e.items.forEach(i=>{if(i.intensity==null)i.intensity=2;if(i.estMin==null)i.estMin=Math.round((i.est||1)*60)});
   if(e.capWd==null)e.capWd=120;if(e.capWe==null)e.capWe=180;
   e.members=(e.members&&e.members.length)?e.members:["自分"];
   return e;
