@@ -1083,11 +1083,11 @@ function renderToday(){
     });
     e.items.forEach(it=>{if(repeatMatchesDate(it,ds)&&!seen.has(it.id)){seen.add(it.id);evalItems.push({it,e})}});
   });
-  // 「やったタスクを出す」: まだ出ていない未完了タスクを選べるように
+  // 「やったタスクを出す」: まだ出ていないタスク（完了済みも含む）を選べるように
   const addSel=$("#today-add-task");
   if(addSel){
     const opts=[];
-    S.events.forEach(e=>e.items.filter(i=>i.pct<100&&!seen.has(i.id)).forEach(i=>opts.push(`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}）</option>`)));
+    S.events.forEach(e=>e.items.filter(i=>!seen.has(i.id)).sort((a,b)=>(a.pct>=100)-(b.pct>=100)).forEach(i=>opts.push(`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}）${i.pct>=100?" ✓完了":""}</option>`)));
     addSel.innerHTML=opts.length?opts.join(""):`<option value="">追加できるタスクはありません</option>`;
   }
   const evalsEl=$("#eval-list");
