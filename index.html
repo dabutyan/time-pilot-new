@@ -439,6 +439,11 @@ svg.chart{width:100%;height:110px;display:block}
       </div>
       <button class="btn small" onclick="startPersonalSync()">同期を開始</button>
     </div>
+    <div class="row" style="margin-bottom:6px">
+      <button class="btn ghost small" onclick="forcePushPersonal()">⬆ この端末→サーバー（上書き）</button>
+      <button class="btn ghost small" onclick="forcePullPersonal()">⬇ サーバー→この端末（上書き）</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px">※同期がうまくいかない時：<b>正しいデータがある端末で「⬆送る」</b>、もう片方で「⬇取り込む」。先にバックアップ書き出しを推奨。</div>
     <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
     <h3 style="font-size:14px">💾 バックアップ</h3>
     <p class="muted" style="margin-bottom:8px">全データをファイルに書き出し／読み込みできます。万一のときの保険に。</p>
@@ -1282,10 +1287,40 @@ window.startPersonalSync=async()=>{
   const inp=($("#personal-code-input").value||"").trim().toUpperCase();
   S.personalCode=inp||Math.random().toString(36).slice(2,8).toUpperCase();
   localSave();
-  await pushPersonal();
+  // 参加時にいきなり上書きしない（データ消失防止）。サーバー状態を見て判断
+  let v=null;try{v=await gasGet(S.personalCode)}catch(e){}
+  const remote=(v&&v.ok&&v.exists&&v.data&&Array.isArray(v.data.events))?v.data.events:null;
+  const rc=remote?remote.length:0,lc=S.events.length;
+  if(remote===null){
+    await pushPersonal(); // サーバー未作成 → この端末で初期化
+  }else if(rc>0&&lc>0){
+    const pull=confirm(`このコードのサーバーには プロジェクト${rc}件 があります（この端末は${lc}件）。\n\n【OK】サーバーの内容をこの端末に取り込む（この端末の今のデータは消えます）\n【キャンセル】この端末の内容をサーバーへ送る（サーバーを上書き）`);
+    if(pull){S.events=remote.map(normalize);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave();}
+    else{await pushPersonal();}
+  }else if(rc>0){
+    S.events=remote.map(normalize);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave(); // サーバーだけにある → 取り込む
+  }else{
+    await pushPersonal(); // サーバー空・この端末にある → 送る
+  }
   startPolling();
-  renderPersonalSync();
-  alert("端末同期を開始しました ✅\nコード: "+S.personalCode+"\n\nスマホでも「📱 端末同期」を開いて\n同じコードを入力→「同期を開始」");
+  renderPersonalSync();renderAll();
+  alert("端末同期を開始しました ✅\nコード: "+S.personalCode);
+};
+window.forcePushPersonal=async()=>{
+  if(!S.personalCode){const inp=($("#personal-code-input").value||"").trim().toUpperCase();if(!inp)return alert("先に同期コードを入力してください");S.personalCode=inp;localSave()}
+  if(!confirm("この端末のデータでサーバーを上書きします（他の端末も次の同期で置き換わります）。よろしいですか?"))return;
+  await pushPersonal();startPolling();renderPersonalSync();
+  alert("送信しました ✅ 他の端末は数秒後に反映されます");
+};
+window.forcePullPersonal=async()=>{
+  if(!S.personalCode){const inp=($("#personal-code-input").value||"").trim().toUpperCase();if(!inp)return alert("先に同期コードを入力してください");S.personalCode=inp;localSave()}
+  let v=null;try{v=await gasGet(S.personalCode)}catch(e){}
+  if(!v||!v.ok||!v.exists||!v.data||!Array.isArray(v.data.events))return alert("サーバーにデータが見つかりません（コードを確認してください）");
+  if(!confirm(`サーバーの ${v.data.events.length}件 をこの端末に取り込みます（この端末の今のデータは消えます）。よろしいですか?`))return;
+  S.events=v.data.events.map(normalize);lastPersonalWriteId=v.writeId||null;
+  if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
+  localSave();startPolling();renderPersonalSync();renderAll();
+  alert("取り込みました ✅");
 };
 window.stopPersonalSync=()=>{
   S.personalCode=null;lastPersonalWriteId=null;
