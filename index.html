@@ -275,6 +275,10 @@ svg.chart{width:100%;height:110px;display:block}
   <div class="card">
     <h2>今日の記録・振り返り <span class="muted" id="today-tl-date"></span></h2>
     <div class="muted" style="margin-bottom:8px">当日はここで「何分やったか」を打つだけ。繰り返しタスクは自動で出ます。</div>
+    <div class="row" style="margin-bottom:10px">
+      <div class="field" style="flex:1;min-width:160px"><label>やったタスクを出す</label><select id="today-add-task"></select></div>
+      <button class="btn small" onclick="addTodayTask()">＋ 記録に追加</button>
+    </div>
     <div id="eval-list"></div>
     <h3 style="font-size:13px;margin:16px 0 6px;color:var(--sub)">今日のログ</h3>
     <div id="today-log-list"></div>
@@ -1079,6 +1083,13 @@ function renderToday(){
     });
     e.items.forEach(it=>{if(repeatMatchesDate(it,ds)&&!seen.has(it.id)){seen.add(it.id);evalItems.push({it,e})}});
   });
+  // 「やったタスクを出す」: まだ出ていない未完了タスクを選べるように
+  const addSel=$("#today-add-task");
+  if(addSel){
+    const opts=[];
+    S.events.forEach(e=>e.items.filter(i=>i.pct<100&&!seen.has(i.id)).forEach(i=>opts.push(`<option value="${i.id}">${esc(i.title)}（${esc(e.name)}）</option>`)));
+    addSel.innerHTML=opts.length?opts.join(""):`<option value="">追加できるタスクはありません</option>`;
+  }
   const evalsEl=$("#eval-list");
   if(evalsEl){
     if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日やるタスクがあるとここで記録・振り返りできます（上のタイムラインまたは週タブで配置／繰り返しタスクは自動表示）</div>`;}
@@ -1151,6 +1162,13 @@ window.quickLogSub=(itemId,subId)=>{
   oe.logs=oe.logs||[];
   oe.logs.push(touch({id:uid(),date:today(),itemId,subId,min,note:""}));
   save();renderAll();
+};
+window.addTodayTask=()=>{
+  const sel=$("#today-add-task");if(!sel||!sel.value)return;
+  const oe=evForItem(sel.value);if(!oe)return;
+  const ds=today();oe.plans=oe.plans||[];
+  if(!oe.plans.some(p=>p.itemId===sel.value&&p.date===ds))oe.plans.push(touch({id:uid(),itemId:sel.value,date:ds,min:0}));
+  save();renderToday();
 };
 
 /* ---------- header / render ---------- */
