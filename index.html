@@ -483,11 +483,18 @@ const fmtMin=m=>m>=60?`${Math.floor(m/60)}h${m%60?m%60+"m":""}`:`${m}m`;
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
 
 /* ---------- state ---------- */
-let S={events:[],cur:null,personalCode:null};
+let S={events:[],cur:null,personalCode:null,del:{}};
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
+if(!S.del)S.del={};
+const nowMs=()=>Date.now();
+const touch=o=>{if(o)o.updatedAt=nowMs();return o};
+let lastActivity=nowMs();
 const localSave=()=>localStorage.setItem(KEY,JSON.stringify(S));
-const save=()=>{localSave();schedulePush();schedulePersonalPush()};
+const save=()=>{lastActivity=nowMs();localSave();schedulePush();schedulePersonalPush()};
 const ev=()=>S.events.find(e=>e.id===S.cur)||null;
+/* 削除の墓標を記録(同期で復活させない) */
+function tombChild(e,id){if(e){e.del=e.del||{};e.del[id]=nowMs();touch(e)}}
+function tombEvent(id){S.del=S.del||{};S.del[id]=nowMs()}
 
 /* ---------- tabs ---------- */
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
@@ -513,17 +520,18 @@ $("#ev-overlay").onclick=e=>{if(e.target.id==="ev-overlay")$("#ev-overlay").clas
 $("#evm-save").onclick=()=>{
   const name=$("#evm-name").value.trim(),date=$("#evm-date").value;
   if(!name)return alert("プロジェクト名を入力してください");
-  if(editingEv){editingEv.name=name;editingEv.date=date;editingEv.cat=$("#evm-cat").value}
+  if(editingEv){editingEv.name=name;editingEv.date=date;editingEv.cat=$("#evm-cat").value;touch(editingEv)}
   else{
-    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],members:["自分"],plans:[],evals:[],capWd:120,capWe:180,capOverrides:{},komaMin:60};
-    S.events.push(e);S.cur=e.id;
+    const e={id:uid(),name,date,cat:$("#evm-cat").value,createdAt:today(),items:[],logs:[],members:["自分"],plans:[],evals:[],capWd:120,capWe:180,capOverrides:{},komaMin:60,del:{}};
+    touch(e);S.events.push(e);S.cur=e.id;
   }
   $("#ev-overlay").classList.remove("show");save();renderAll();
 };
 $("#ev-del").onclick=()=>{
   if(!ev()||!confirm(`「${ev().name}」を全データごと削除しますか?`))return;
+  const delId=S.cur;
   S.events=S.events.filter(e=>e.id!==S.cur);S.cur=S.events.length?S.events[0].id:null;
-  save();renderAll();
+  tombEvent(delId);save();renderAll();
 };
 $("#ev-select").onchange=()=>{S.cur=$("#ev-select").value;localSave();renderAll()};
 
@@ -603,7 +611,7 @@ function autoAllocate(e){
       if(tk.i.due&&day.ds>tk.i.due)break; // そのタスクの締切より後には積まない
       if(day.free<=0)continue;
       const put=Math.min(need,day.free);
-      e.plans.push({id:uid(),itemId:tk.i.id,date:day.ds,min:put});
+      e.plans.push(touch({id:uid(),itemId:tk.i.id,date:day.ds,min:put}));
       day.free-=put;need-=put;
     }
     unplaced+=need;
@@ -687,7 +695,7 @@ $("#i-add").onclick=()=>{
   const rep=($("#i-rep")&&$("#i-rep").value)||"none";
   const it={id:uid(),title,due:rep!=="none"?"":($("#i-due").value||e.date),estMin:Math.max(1,+$("#i-est").value||60),owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()};
   if(rep!=="none")it.repeat=rep;
-  e.items.push(it);
+  touch(it);e.items.push(it);
   $("#i-title").value="";if($("#i-rep"))$("#i-rep").value="none";save();renderAll();
 };
 function dueCls(due,pct){
@@ -768,16 +776,16 @@ function renderItems(){
   $("#items-open").innerHTML=openEntries.length?openEntries.map(({i,oe})=>itemHtml(i,oe)).join(""):`<div class="empty">準備タスクを追加しましょう</div>`;
   $("#items-done").innerHTML=doneEntries.length?doneEntries.map(({i,oe})=>itemHtml(i,oe)).join(""):`<div class="empty">まだありません</div>`;
 }
-window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();save();renderAll()};
-window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);save();renderAll()};
+window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);i.pct=+v;if(i.pct>=100)i.doneAt=today();touch(i);save();renderAll()};
+window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);tombChild(oe,id);save();renderAll()};
 /* サブタスク操作 */
 function findItem(id){const oe=evForItem(id);return oe?oe.items.find(x=>x.id===id):null}
-window.cycleRepeat=id=>{const i=findItem(id);if(!i)return;const order=["daily","weekday","weekend","none"];const cur=i.repeat||"daily";const nx=order[(order.indexOf(cur)+1)%order.length];if(nx==="none")delete i.repeat;else i.repeat=nx;save();renderAll()};
-window.startSubs=id=>{const i=findItem(id);if(!i)return;i.subs=i.subs||[];save();renderAll();const inp=$("#subadd-"+id);if(inp)inp.focus()};
-window.removeSubs=id=>{const i=findItem(id);if(!i)return;if(i.subs&&i.subs.length&&!confirm("サブタスクを消してスライダー管理に戻しますか?"))return;delete i.subs;save();renderAll()};
-window.addSub=id=>{const i=findItem(id);if(!i)return;const inp=$("#subadd-"+id);const t=inp?inp.value.trim():"";if(!t)return;i.subs=i.subs||[];i.subs.push({id:uid(),title:t,done:false});recalcSubPct(i);save();renderAll();const n=$("#subadd-"+id);if(n)n.focus()};
-window.toggleSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;const s=i.subs.find(x=>x.id===sid);if(!s)return;s.done=!s.done;recalcSubPct(i);save();renderAll()};
-window.delSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;i.subs=i.subs.filter(x=>x.id!==sid);recalcSubPct(i);save();renderAll()};
+window.cycleRepeat=id=>{const i=findItem(id);if(!i)return;const order=["daily","weekday","weekend","none"];const cur=i.repeat||"daily";const nx=order[(order.indexOf(cur)+1)%order.length];if(nx==="none")delete i.repeat;else i.repeat=nx;touch(i);save();renderAll()};
+window.startSubs=id=>{const i=findItem(id);if(!i)return;i.subs=i.subs||[];touch(i);save();renderAll();const inp=$("#subadd-"+id);if(inp)inp.focus()};
+window.removeSubs=id=>{const i=findItem(id);if(!i)return;if(i.subs&&i.subs.length&&!confirm("サブタスクを消してスライダー管理に戻しますか?"))return;delete i.subs;touch(i);save();renderAll()};
+window.addSub=id=>{const i=findItem(id);if(!i)return;const inp=$("#subadd-"+id);const t=inp?inp.value.trim():"";if(!t)return;i.subs=i.subs||[];i.subs.push({id:uid(),title:t,done:false});recalcSubPct(i);touch(i);save();renderAll();const n=$("#subadd-"+id);if(n)n.focus()};
+window.toggleSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;const s=i.subs.find(x=>x.id===sid);if(!s)return;s.done=!s.done;recalcSubPct(i);touch(i);save();renderAll()};
+window.delSub=(id,sid)=>{const i=findItem(id);if(!i||!i.subs)return;i.subs=i.subs.filter(x=>x.id!==sid);recalcSubPct(i);touch(i);save();renderAll()};
 
 /* ---------- logs（全プロジェクト横断・過去日も記録可） ---------- */
 function renderLogForm(){
@@ -796,7 +804,7 @@ $("#l-add").onclick=()=>{
   const oe=itemId?evForItem(itemId):(ev()||S.events[0]);
   if(!oe)return;
   oe.logs=oe.logs||[];
-  oe.logs.push({id:uid(),date:$("#l-date").value||today(),itemId,min,note});
+  oe.logs.push(touch({id:uid(),date:$("#l-date").value||today(),itemId,min,note}));
   const np=$("#l-pct").value;
   if(np!==""&&itemId){const i=oe.items.find(x=>x.id===itemId);if(i){i.pct=+np;if(i.pct>=100)i.doneAt=today()}}
   $("#l-note").value="";$("#l-pct").value="";
@@ -816,14 +824,14 @@ function renderLogs(){
         return `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${i?esc(i.title):"その他"}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`}).join("")+`</div>`;
   }).join("");
 }
-window.delLog=id=>{const oe=S.events.find(e=>(e.logs||[]).some(l=>l.id===id));if(!oe)return;oe.logs=oe.logs.filter(l=>l.id!==id);save();renderAll()};
+window.delLog=id=>{const oe=S.events.find(e=>(e.logs||[]).some(l=>l.id===id));if(!oe)return;oe.logs=oe.logs.filter(l=>l.id!==id);tombChild(oe,id);save();renderAll()};
 
 /* ---------- members ---------- */
 $("#m-add").onclick=()=>{
   const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const n=$("#m-name").value.trim();if(!n)return;
   if(e.members.includes(n))return alert("同名のメンバーがいます");
-  e.members.push(n);$("#m-name").value="";save();renderAll();
+  e.members.push(n);touch(e);$("#m-name").value="";save();renderAll();
 };
 function renderMembers(){
   const e=ev();
@@ -866,8 +874,11 @@ window.openDayPicker=ds=>{dayPickDate=ds;renderDayPicker();$("#daypick-overlay")
 window.toggleDayTask=itemId=>{
   const oe=evForItem(itemId);if(!oe||!dayPickDate)return;
   oe.plans=oe.plans||[];
-  if(oe.plans.some(p=>p.itemId===itemId&&p.date===dayPickDate))oe.plans=oe.plans.filter(p=>!(p.itemId===itemId&&p.date===dayPickDate));
-  else oe.plans.push({id:uid(),itemId,date:dayPickDate,min:komaOf(oe)});
+  if(oe.plans.some(p=>p.itemId===itemId&&p.date===dayPickDate)){
+    oe.plans.filter(p=>p.itemId===itemId&&p.date===dayPickDate).forEach(p=>tombChild(oe,p.id));
+    oe.plans=oe.plans.filter(p=>!(p.itemId===itemId&&p.date===dayPickDate));
+  }
+  else oe.plans.push(touch({id:uid(),itemId,date:dayPickDate,min:komaOf(oe)}));
   save();renderDayPicker();renderPlan();
 };
 function renderDayPicker(){
@@ -883,10 +894,11 @@ $("#daypick-close").onclick=()=>$("#daypick-overlay").classList.remove("show");
 $("#daypick-overlay").onclick=e=>{if(e.target.id==="daypick-overlay")$("#daypick-overlay").classList.remove("show")};
 window.removeDayTask=(ds,itemId)=>{
   const oe=evForItem(itemId);if(!oe)return;
+  (oe.plans||[]).filter(p=>p.itemId===itemId&&p.date===ds).forEach(p=>tombChild(oe,p.id));
   oe.plans=(oe.plans||[]).filter(p=>!(p.itemId===itemId&&p.date===ds));
   save();renderAll();
 };
-$("#cap-save").onclick=()=>{const e=ev();if(!e)return;e.capWd=+$("#cap-wd").value||0;e.capWe=+$("#cap-we").value||0;e.komaMin=Math.max(5,+$("#cap-koma").value||60);save();renderAll()};
+$("#cap-save").onclick=()=>{const e=ev();if(!e)return;e.capWd=+$("#cap-wd").value||0;e.capWe=+$("#cap-we").value||0;e.komaMin=Math.max(5,+$("#cap-koma").value||60);touch(e);save();renderAll()};
 $("#wk-prev").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()-7);weekStart=new Date(weekStart);renderPlan()};
 $("#wk-next").onclick=()=>{weekStart=weekStart||mondayOf(new Date());weekStart.setDate(weekStart.getDate()+7);weekStart=new Date(weekStart);renderPlan()};
 $("#plan-auto").onclick=()=>{
@@ -947,8 +959,8 @@ function renderPlan(){
 }
 
 /* ---------- 追加機能: 強度 / 日別容量 / 分割 / 記録カレンダー ---------- */
-window.cycleInt=id=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);if(!i)return;i.intensity=(intOf(i)%3)+1;save();renderAll()};
-window.setDayCap=(ds,v)=>{const e=ev();if(!e)return;e.capOverrides=e.capOverrides||{};const n=Math.max(0,+v||0);const base=isWeekend(ds)?(e.capWe||0):(e.capWd||0);if(n===base)delete e.capOverrides[ds];else e.capOverrides[ds]=n;save();renderAll()};
+window.cycleInt=id=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.find(x=>x.id===id);if(!i)return;i.intensity=(intOf(i)%3)+1;touch(i);save();renderAll()};
+window.setDayCap=(ds,v)=>{const e=ev();if(!e)return;e.capOverrides=e.capOverrides||{};const n=Math.max(0,+v||0);const base=isWeekend(ds)?(e.capWe||0):(e.capWd||0);if(n===base)delete e.capOverrides[ds];else e.capOverrides[ds]=n;touch(e);save();renderAll()};
 /* 記録カレンダー */
 let calMonth=null;
 function monthStart(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(1);return x}
@@ -987,26 +999,26 @@ window.confirmSlotAdd=h=>{
   const oe=evForItem(sel.value);if(!oe)return;
   const min=Math.max(5,+minEl.value||30);
   const ds=today();oe.plans=oe.plans||[];
-  oe.plans.push({id:uid(),itemId:sel.value,date:ds,min,startHour:h});
+  oe.plans.push(touch({id:uid(),itemId:sel.value,date:ds,min,startHour:h}));
   addSlotHour=null;
   save();renderToday();
 };
 window.removeTodaySlot=pid=>{
-  S.events.forEach(e=>{e.plans=(e.plans||[]).filter(p=>p.id!==pid)});
+  S.events.forEach(e=>{if((e.plans||[]).some(p=>p.id===pid))tombChild(e,pid);e.plans=(e.plans||[]).filter(p=>p.id!==pid)});
   save();renderToday();
 };
 window.setEval=(itemId,rating)=>{
   const oe=evForItem(itemId);if(!oe)return;
   const ds=today();oe.evals=oe.evals||[];
   const x=oe.evals.find(v=>v.date===ds&&v.itemId===itemId);
-  if(x)x.rating=rating;else oe.evals.push({id:uid(),date:ds,itemId,rating,note:""});
+  if(x){x.rating=rating;touch(x)}else oe.evals.push(touch({id:uid(),date:ds,itemId,rating,note:""}));
   save();renderToday();
 };
 window.setEvalNote=(itemId,note)=>{
   const oe=evForItem(itemId);if(!oe)return;
   const ds=today();oe.evals=oe.evals||[];
   const x=oe.evals.find(v=>v.date===ds&&v.itemId===itemId);
-  if(x)x.note=note;else oe.evals.push({id:uid(),date:ds,itemId,rating:null,note});
+  if(x){x.note=note;touch(x)}else oe.evals.push(touch({id:uid(),date:ds,itemId,rating:null,note}));
   save();
 };
 function renderToday(){
@@ -1128,7 +1140,7 @@ window.quickLog=itemId=>{
   const note=((noteEl&&noteEl.value)||"").trim();
   if(!min&&!note)return alert("時間かメモを入力してください");
   oe.logs=oe.logs||[];
-  oe.logs.push({id:uid(),date:today(),itemId,min,note});
+  oe.logs.push(touch({id:uid(),date:today(),itemId,min,note}));
   save();renderAll();
 };
 window.quickLogSub=(itemId,subId)=>{
@@ -1137,7 +1149,7 @@ window.quickLogSub=(itemId,subId)=>{
   const min=+(minEl&&minEl.value)||0;
   if(!min)return alert("時間を入力してください");
   oe.logs=oe.logs||[];
-  oe.logs.push({id:uid(),date:today(),itemId,subId,min,note:""});
+  oe.logs.push(touch({id:uid(),date:today(),itemId,subId,min,note:""}));
   save();renderAll();
 };
 
@@ -1160,12 +1172,49 @@ let lastWriteId=null,pushTimer=null,pollTimer=null,gasBusy=false;
 const gasUrl=()=>GAS_URL||localStorage.getItem(GASKEY)||"";
 function normalize(e){
   e.items=e.items||[];e.logs=e.logs||[];e.plans=e.plans||[];e.evals=e.evals||[];
-  e.capOverrides=e.capOverrides||{};
+  e.capOverrides=e.capOverrides||{};e.del=e.del||{};
   if(e.komaMin==null)e.komaMin=60;
   e.items.forEach(i=>{if(i.intensity==null)i.intensity=2;if(i.estMin==null)i.estMin=Math.round((i.est||1)*60)});
   if(e.capWd==null)e.capWd=120;if(e.capWe==null)e.capWe=180;
   e.members=(e.members&&e.members.length)?e.members:["自分"];
   return e;
+}
+/* ---------- マージ同期: id単位で合体し、削除は墓標で抑止 ---------- */
+function mergeDel(a,b){const o=Object.assign({},a||{});const bb=b||{};for(const k in bb)o[k]=Math.max(o[k]||0,bb[k]||0);return o}
+const byId=(a,b)=>a.id<b.id?-1:a.id>b.id?1:0;
+function mergeChildArr(la,ra,del){
+  const m=new Map();
+  (la||[]).forEach(x=>m.set(x.id,x));
+  (ra||[]).forEach(x=>{const ex=m.get(x.id);if(!ex||(x.updatedAt||0)>=(ex.updatedAt||0))m.set(x.id,x)});
+  const out=[];m.forEach(x=>{const dt=(del&&del[x.id])||0;if(dt>(x.updatedAt||0))return;out.push(x)});
+  return out.sort(byId);
+}
+function mergeEvent(la,ra){
+  const base=(la.updatedAt||0)>=(ra.updatedAt||0)?la:ra;
+  const del=mergeDel(la.del,ra.del);
+  const e=Object.assign({},base);
+  e.del=del;
+  e.items=mergeChildArr(la.items,ra.items,del);
+  e.plans=mergeChildArr(la.plans,ra.plans,del);
+  e.logs=mergeChildArr(la.logs,ra.logs,del);
+  e.evals=mergeChildArr(la.evals,ra.evals,del);
+  e.members=[...new Set([...(la.members||[]),...(ra.members||[])])];if(!e.members.length)e.members=["自分"];
+  return normalize(e);
+}
+/* ローカル events と リモート events を合体。topDel=プロジェクト削除の墓標 */
+function mergeAllEvents(local,remote,topDel){
+  const lm=new Map((local||[]).map(e=>[e.id,e]));
+  const rm=new Map((remote||[]).map(e=>[e.id,e]));
+  const ids=new Set([...lm.keys(),...rm.keys()]);
+  const out=[];
+  ids.forEach(id=>{
+    const l=lm.get(id),r=rm.get(id);
+    const merged=(l&&r)?mergeEvent(l,r):normalize(Object.assign({},l||r));
+    const dt=(topDel&&topDel[id])||0;
+    if(dt>(merged.updatedAt||0))return; // 削除済み
+    out.push(merged);
+  });
+  return out.sort(byId);
 }
 async function gasGet(room){
   const r=await fetch(gasUrl()+"?room="+encodeURIComponent(room),{method:"GET"});
@@ -1212,9 +1261,16 @@ async function pollOnce(){
       const v=await gasGet(S.personalCode);
       if(v&&v.ok&&v.exists&&v.data&&v.data.events){
         if(!v.writeId||v.writeId!==lastPersonalWriteId){
-          S.events=v.data.events.map(normalize);
+          // 置き換えではなく合体: 別端末の変更を消さない
+          const remoteEvents=v.data.events.map(normalize);
+          const remoteDel=(v.data.del)||{};
+          S.del=mergeDel(S.del,remoteDel);
+          const before=JSON.stringify(S.events);
+          S.events=mergeAllEvents(S.events,remoteEvents,S.del);
           if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
-          localSave();changed=true;
+          localSave();
+          if(JSON.stringify(S.events)!==before){changed=true;schedulePersonalPush();} // 合体結果を送り返して収束
+          else changed=true;
         }
       }
     }
@@ -1222,11 +1278,29 @@ async function pollOnce(){
   finally{gasBusy=false}
   if(changed)renderAll();
 }
-function startPolling(){
-  if(pollTimer||!gasUrl())return;
-  pollOnce();
-  pollTimer=setInterval(pollOnce,4000);
+/* 賢いポーリング: 操作中は1秒、放置で段階的に伸ばし無料枠を守る */
+function pollDelay(){
+  if(document.hidden)return 15000;
+  const idle=nowMs()-lastActivity;
+  if(idle<30000)return 1000;   // 直近30秒=操作中 → 1秒
+  if(idle<120000)return 3000;  // 〜2分 → 3秒
+  if(idle<600000)return 8000;  // 〜10分 → 8秒
+  return 20000;                // それ以上放置 → 20秒
 }
+let pollStarted=false;
+function scheduleNextPoll(){
+  clearTimeout(pollTimer);
+  pollTimer=setTimeout(async()=>{await pollOnce();scheduleNextPoll()},pollDelay());
+}
+function startPolling(){
+  if(pollStarted||!gasUrl())return;
+  pollStarted=true;
+  pollOnce().finally(scheduleNextPoll);
+}
+// 画面に戻った/操作したら即時に同期を速める
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){lastActivity=nowMs();if(pollStarted){clearTimeout(pollTimer);pollTimer=setTimeout(async()=>{await pollOnce();scheduleNextPoll()},200)}}});
+window.addEventListener("focus",()=>{lastActivity=nowMs()});
+document.addEventListener("pointerdown",()=>{lastActivity=nowMs()},{passive:true});
 function setSync(){
   const e=ev();
   const el=$("#sync-dot");
@@ -1269,7 +1343,7 @@ function schedulePersonalPush(){
 async function pushPersonal(){
   if(!S.personalCode||!gasUrl())return;
   lastPersonalWriteId=uid();
-  try{await gasPost(S.personalCode,{events:JSON.parse(JSON.stringify(S.events))},lastPersonalWriteId)}
+  try{await gasPost(S.personalCode,{events:JSON.parse(JSON.stringify(S.events)),del:S.del||{}},lastPersonalWriteId)}
   catch(err){console.error("personal push失敗",err)}
 }
 function renderPersonalSync(){
@@ -1295,10 +1369,10 @@ window.startPersonalSync=async()=>{
     await pushPersonal(); // サーバー未作成 → この端末で初期化
   }else if(rc>0&&lc>0){
     const pull=confirm(`このコードのサーバーには プロジェクト${rc}件 があります（この端末は${lc}件）。\n\n【OK】サーバーの内容をこの端末に取り込む（この端末の今のデータは消えます）\n【キャンセル】この端末の内容をサーバーへ送る（サーバーを上書き）`);
-    if(pull){S.events=remote.map(normalize);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave();}
+    if(pull){S.events=remote.map(normalize);S.del=mergeDel(S.del,v.data.del);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave();}
     else{await pushPersonal();}
   }else if(rc>0){
-    S.events=remote.map(normalize);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave(); // サーバーだけにある → 取り込む
+    S.events=remote.map(normalize);S.del=mergeDel(S.del,v.data.del);lastPersonalWriteId=v.writeId||null;if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;localSave(); // サーバーだけにある → 取り込む
   }else{
     await pushPersonal(); // サーバー空・この端末にある → 送る
   }
@@ -1317,7 +1391,7 @@ window.forcePullPersonal=async()=>{
   let v=null;try{v=await gasGet(S.personalCode)}catch(e){}
   if(!v||!v.ok||!v.exists||!v.data||!Array.isArray(v.data.events))return alert("サーバーにデータが見つかりません（コードを確認してください）");
   if(!confirm(`サーバーの ${v.data.events.length}件 をこの端末に取り込みます（この端末の今のデータは消えます）。よろしいですか?`))return;
-  S.events=v.data.events.map(normalize);lastPersonalWriteId=v.writeId||null;
+  S.events=v.data.events.map(normalize);S.del=mergeDel(S.del,v.data.del);lastPersonalWriteId=v.writeId||null;
   if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
   localSave();startPolling();renderPersonalSync();renderAll();
   alert("取り込みました ✅");
@@ -1358,7 +1432,7 @@ $("#join-btn").onclick=async()=>{
 };
 /* ---------- バックアップ / 復元 ---------- */
 window.exportData=()=>{
-  const payload={app:"TIME PILOT",version:1,exportedAt:new Date().toISOString(),events:S.events};
+  const payload={app:"TIME PILOT",version:1,exportedAt:new Date().toISOString(),events:S.events,del:S.del||{}};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
@@ -1376,6 +1450,7 @@ window.importData=inp=>{
       if(!Array.isArray(evs))throw new Error("形式が違います");
       if(!confirm(`バックアップを読み込みます。\nプロジェクト ${evs.length}件 で現在のデータを置き換えます。よろしいですか?`)){inp.value="";return}
       S.events=evs.map(normalize);
+      if(data&&data.del)S.del=mergeDel(S.del,data.del);
       if(!S.events.find(e=>e.id===S.cur))S.cur=S.events.length?S.events[0].id:null;
       save();renderAll();
       alert("読み込みました ✅");
