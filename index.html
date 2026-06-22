@@ -273,19 +273,20 @@ svg.chart{width:100%;height:110px;display:block}
 <!-- 今日タイムライン -->
 <section id="v-today" class="view">
   <div class="card">
-    <h2>今日を組み立てる <span class="muted" id="today-tl-date"></span></h2>
-    <div id="today-tl-palette" class="palette"></div>
-    <div id="today-tl-hint" class="muted" style="margin-top:8px"></div>
-  </div>
-  <div class="card" style="padding:0 12px">
-    <div id="today-timeline"></div>
-  </div>
-  <div class="card">
-    <h2>今日の記録・振り返り <span class="muted">やった分数と手応えを記録</span></h2>
+    <h2>今日の記録・振り返り <span class="muted" id="today-tl-date"></span></h2>
+    <div class="muted" style="margin-bottom:8px">当日はここで「何分やったか」を打つだけ。繰り返しタスクは自動で出ます。</div>
     <div id="eval-list"></div>
     <h3 style="font-size:13px;margin:16px 0 6px;color:var(--sub)">今日のログ</h3>
     <div id="today-log-list"></div>
   </div>
+  <details class="card">
+    <summary style="cursor:pointer;font-weight:700;font-size:14px">🗓️ タイムテーブルを組む（前日の計画・任意）</summary>
+    <div style="margin-top:10px">
+      <div id="today-tl-palette" class="palette"></div>
+      <div id="today-tl-hint" class="muted" style="margin-top:8px"></div>
+      <div id="today-timeline" style="margin-top:10px"></div>
+    </div>
+  </details>
   <details class="card">
     <summary style="cursor:pointer;font-weight:700;font-size:14px">過去の記録・カレンダー（さかのぼって記録）</summary>
     <div style="margin-top:12px">
@@ -348,6 +349,7 @@ svg.chart{width:100%;height:110px;display:block}
       <div class="field"><label>期限</label><input type="date" id="i-due"></div>
       <div class="field"><label>見込み(分)</label><input type="number" id="i-est" min="1" step="1" value="60" style="width:80px"></div>
       <div class="field"><label>強度</label><select id="i-int"><option value="1">軽</option><option value="2" selected>中</option><option value="3">重</option></select></div>
+      <div class="field"><label>繰り返し</label><select id="i-rep"><option value="none">なし</option><option value="daily">毎日</option><option value="weekday">平日</option><option value="weekend">週末</option></select></div>
       <div class="field"><label>担当</label><select id="i-owner"></select></div>
       <button class="btn" id="i-add">追加</button>
     </div>
@@ -522,9 +524,10 @@ $("#ev-select").onchange=()=>{S.cur=$("#ev-select").value;localSave();renderAll(
 
 /* ---------- progress / pace ---------- */
 function overallPct(e){
-  if(!e.items.length)return 0;
+  const its=deadlineItems(e);
+  if(!its.length)return 0;
   let w=0,s=0;
-  e.items.forEach(i=>{const wt=estMinOf(i);w+=wt;s+=wt*i.pct});
+  its.forEach(i=>{const wt=estMinOf(i);w+=wt;s+=wt*i.pct});
   return w?Math.round(s/w):0;
 }
 function expectedPct(e){
@@ -535,7 +538,7 @@ function expectedPct(e){
 }
 function paceInfo(e){
   const p=overallPct(e),ex=expectedPct(e);
-  if(!e.items.length)return{cls:"warn",msg:"準備タスクをまだ登録していません。「準備タスク」タブで本番までにやることを洗い出しましょう。"};
+  if(!deadlineItems(e).length)return{cls:"warn",msg:"準備タスクをまだ登録していません。「準備タスク」タブで本番までにやることを洗い出しましょう。"};
   if(ex==null)return{cls:"warn",msg:`<b class="v">本番日が未定です 📅</b><br>現在の達成度は<b>${p}%</b>。「プロジェクト編集」で本番日を設定すると、残り日数に応じたペース判定が表示されます。`};
   const diff=p-ex;
   const left=daysBetween(today(),e.date);
@@ -553,6 +556,18 @@ const INTLBL={1:"軽",2:"中",3:"重"};
 /* 見込み時間は分で保持(estMin)。旧データ(est=時間)は分に換算 */
 const estMinOf=i=>i.estMin!=null?i.estMin:Math.round((i.est||1)*60);
 function remainMin(i){return Math.max(0,Math.round(estMinOf(i)*(1-(i.pct||0)/100)))}
+/* 繰り返し(習慣)タスク。締切系の進捗計算からは除外する */
+const isRepeat=i=>!!(i&&i.repeat&&i.repeat!=="none");
+const REPEATLBL={daily:"毎日",weekday:"平日",weekend:"週末"};
+function repeatMatchesDate(i,ds){
+  if(!isRepeat(i))return false;
+  const w=parseD(ds).getDay(); // 0=日..6=土
+  if(i.repeat==="daily")return true;
+  if(i.repeat==="weekday")return w>=1&&w<=5;
+  if(i.repeat==="weekend")return w===0||w===6;
+  return false;
+}
+const deadlineItems=e=>e.items.filter(i=>!isRepeat(i)); // 締切系の対象タスク
 function plannedMin(e,ds){return (e.plans||[]).filter(p=>p.date===ds).reduce((s,p)=>s+(p.min||0),0)}
 function plannedForItem(e,id){return (e.plans||[]).filter(p=>p.itemId===id).reduce((s,p)=>s+(p.min||0),0)}
 function actualForItem(e,id){return (e.logs||[]).filter(l=>l.itemId===id).reduce((s,l)=>s+(l.min||0),0)}
@@ -561,7 +576,7 @@ function recalcSubPct(i){if(Array.isArray(i.subs)&&i.subs.length){i.pct=Math.rou
 /* 見積り精度: 完了タスクの実績÷見込み */
 function estAccuracy(){let estSum=0,actSum=0,n=0;S.events.forEach(e=>e.items.filter(i=>i.pct>=100).forEach(i=>{const a=actualForItem(e,i.id);if(a>0){estSum+=estMinOf(i);actSum+=a;n++}}));return(n&&estSum)?{ratio:actSum/estSum,n,estSum,actSum}:null}
 function fitInfo(e){
-  const rem=e.items.filter(i=>i.pct<100).reduce((s,i)=>s+remainMin(i),0);
+  const rem=deadlineItems(e).filter(i=>i.pct<100).reduce((s,i)=>s+remainMin(i),0);
   if(!e.date)return{rem,avail:null,diff:null};
   let avail=0,d=parseD(today());const end=parseD(e.date);
   while(d<end){avail+=dayCap(e,fmtD(d));d.setDate(d.getDate()+1)}
@@ -569,7 +584,7 @@ function fitInfo(e){
 }
 function autoAllocate(e){
   e.plans=e.plans||[];
-  const tasks=e.items.filter(i=>i.pct<100)
+  const tasks=deadlineItems(e).filter(i=>i.pct<100)
     .map(i=>({i,need:Math.max(0,remainMin(i)-plannedForItem(e,i.id))}))
     .filter(x=>x.need>0)
     .sort((a,b)=>((a.i.due||"9999")<(b.i.due||"9999")?-1:1));
@@ -593,7 +608,7 @@ function autoAllocate(e){
 
 function riskItems(e){
   const t=today();
-  return e.items.filter(i=>i.pct<100&&i.due).map(i=>{
+  return deadlineItems(e).filter(i=>i.pct<100&&i.due).map(i=>{
     const left=daysBetween(t,i.due);
     let score=0;
     if(left<0)score=3;else if(left<=3&&i.pct<70)score=2;else if(left<=7&&i.pct<40)score=1;
@@ -647,7 +662,7 @@ function renderHome(){
     <div class="kpi"><div class="v">${fmtMin(tot14)}</div><div class="l">直近14日の活動</div></div>
     <div class="kpi"><div class="v">${activeDays}/14日</div><div class="l">活動した日数</div></div>
     <div class="kpi"><div class="v">${fmtMin(totalAll)}</div><div class="l">累計活動時間</div></div>
-    <div class="kpi"><div class="v">${e.items.filter(i=>i.pct>=100).length}/${e.items.length}</div><div class="l">完了タスク</div></div>`;
+    <div class="kpi"><div class="v">${deadlineItems(e).filter(i=>i.pct>=100).length}/${deadlineItems(e).length}</div><div class="l">完了タスク</div></div>`;
   const max=Math.max(60,...perDay);
   const bw=700/14;
   $("#h-chart").innerHTML=perDay.map((m,k)=>{
@@ -664,8 +679,11 @@ $("#i-add").onclick=()=>{
   const e=ev();if(!e)return alert("先にプロジェクトを追加してください");
   const title=$("#i-title").value.trim();
   if(!title)return alert("やることを入力してください");
-  e.items.push({id:uid(),title,due:$("#i-due").value||e.date,estMin:Math.max(1,+$("#i-est").value||60),owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()});
-  $("#i-title").value="";save();renderAll();
+  const rep=($("#i-rep")&&$("#i-rep").value)||"none";
+  const it={id:uid(),title,due:rep!=="none"?"":($("#i-due").value||e.date),estMin:Math.max(1,+$("#i-est").value||60),owner:$("#i-owner").value,intensity:+$("#i-int").value||2,pct:0,createdAt:today()};
+  if(rep!=="none")it.repeat=rep;
+  e.items.push(it);
+  $("#i-title").value="";if($("#i-rep"))$("#i-rep").value="none";save();renderAll();
 };
 function dueCls(due,pct){
   if(!due||pct>=100)return"";
@@ -677,6 +695,20 @@ function itemHtml(i,oe){
   const planned=plannedForItem(oe,i.id);const ic=intOf(i);
   const actual=actualForItem(oe,i.id);
   const ratio=(i.pct>=100&&actual>0)?actual/estMinOf(i):null;
+  // 繰り返し(習慣)タスク: 進捗バーなし。毎日の時間記録だけ
+  if(isRepeat(i)){
+    return `<div class="item">
+      <div class="top">
+        <span class="t">${esc(i.title)}</span>
+        <span class="tag" style="background:var(--bg);color:var(--sub)">${esc(oe.name)}</span>
+        <span class="tag" style="background:var(--accent-soft);color:var(--accent)" onclick="cycleRepeat('${i.id}')" title="クリックで繰り返しを変更">🔁 ${REPEATLBL[i.repeat]||"繰り返し"}</span>
+        <span class="ichip i${ic}" onclick="cycleInt('${i.id}')" title="クリックで強度変更">強度:${INTLBL[ic]}</span>
+        <span class="muted">1回あたり見込み${fmtMin(estMinOf(i))}</span>
+        <button class="btn danger small" onclick="delItem('${i.id}')">✕</button>
+      </div>
+      <div class="muted" style="margin-top:4px">該当日の「今日」タブに自動で出ます。時間はそこで記録。</div>
+    </div>`;
+  }
   const subMode=Array.isArray(i.subs);
   let ctl;
   if(subMode){
@@ -735,6 +767,7 @@ window.setPct=(id,v)=>{const oe=evForItem(id);if(!oe)return;const i=oe.items.fin
 window.delItem=id=>{if(!confirm("このタスクを削除しますか?"))return;const oe=evForItem(id);if(!oe)return;oe.items=oe.items.filter(x=>x.id!==id);save();renderAll()};
 /* サブタスク操作 */
 function findItem(id){const oe=evForItem(id);return oe?oe.items.find(x=>x.id===id):null}
+window.cycleRepeat=id=>{const i=findItem(id);if(!i)return;const order=["daily","weekday","weekend","none"];const cur=i.repeat||"daily";const nx=order[(order.indexOf(cur)+1)%order.length];if(nx==="none")delete i.repeat;else i.repeat=nx;save();renderAll()};
 window.startSubs=id=>{const i=findItem(id);if(!i)return;i.subs=i.subs||[];save();renderAll();const inp=$("#subadd-"+id);if(inp)inp.focus()};
 window.removeSubs=id=>{const i=findItem(id);if(!i)return;if(i.subs&&i.subs.length&&!confirm("サブタスクを消してスライダー管理に戻しますか?"))return;delete i.subs;save();renderAll()};
 window.addSub=id=>{const i=findItem(id);if(!i)return;const inp=$("#subadd-"+id);const t=inp?inp.value.trim():"";if(!t)return;i.subs=i.subs||[];i.subs.push({id:uid(),title:t,done:false});recalcSubPct(i);save();renderAll();const n=$("#subadd-"+id);if(n)n.focus()};
@@ -1020,35 +1053,52 @@ function renderToday(){
   }
   html+=`</div>`;
   const tl=$("#today-timeline");if(tl)tl.innerHTML=html;
-  // 記録・振り返り: 全プロジェクトの今日計画タスク
-  const evalItems=[];
+  // 記録・振り返り: 今日計画されたタスク ＋ 繰り返し(該当日)のタスク
+  const evalItems=[],seen=new Set();
   S.events.forEach(e=>{
     e.evals=e.evals||[];
-    const ids=[...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))];
-    ids.forEach(id=>{const it=e.items.find(x=>x.id===id);if(it)evalItems.push({it,e})});
+    [...new Set((e.plans||[]).filter(p=>p.date===ds).map(p=>p.itemId))].forEach(id=>{
+      const it=e.items.find(x=>x.id===id);if(it&&!seen.has(it.id)){seen.add(it.id);evalItems.push({it,e})}
+    });
+    e.items.forEach(it=>{if(repeatMatchesDate(it,ds)&&!seen.has(it.id)){seen.add(it.id);evalItems.push({it,e})}});
   });
   const evalsEl=$("#eval-list");
   if(evalsEl){
-    if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日やるタスクがあるとここで記録・振り返りできます（上のタイムラインまたは週タブで配置）</div>`;}
+    if(!evalItems.length){evalsEl.innerHTML=`<div class="empty">今日やるタスクがあるとここで記録・振り返りできます（上のタイムラインまたは週タブで配置／繰り返しタスクは自動表示）</div>`;}
     else evalsEl.innerHTML=evalItems.map(({it,e})=>{
       const ev_=e.evals.find(x=>x.date===ds&&x.itemId===it.id);
       const r=ev_?ev_.rating:null;
       const recMin=(e.logs||[]).filter(l=>l.date===ds&&l.itemId===it.id).reduce((s,l)=>s+l.min,0);
       const planMin=(e.plans||[]).filter(p=>p.date===ds&&p.itemId===it.id).reduce((s,p)=>s+(p.min||0),0);
-      const defMin=planMin||30;
-      return `<div class="eval-item">
-        <div class="eval-title">${esc(it.title)} <span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span>${planMin?` <span class="muted" style="font-size:11px">予定${fmtMin(planMin)}</span>`:""}${recMin?` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">今日 ${fmtMin(recMin)} 記録済</span>`:""}</div>
-        <div class="eval-btns">
+      const subMode=Array.isArray(it.subs)&&it.subs.length;
+      const head=`<div class="eval-title">${esc(it.title)} ${isRepeat(it)?`<span class="tag" style="background:var(--accent-soft);color:var(--accent);font-size:10px">🔁${REPEATLBL[it.repeat]||""}</span> `:""}<span class="muted" style="font-size:12px;font-weight:400">${esc(e.name)}</span>${planMin?` <span class="muted" style="font-size:11px">予定${fmtMin(planMin)}</span>`:""}${recMin?` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">今日 ${fmtMin(recMin)} 記録済</span>`:""}</div>`;
+      const rate=`<div class="eval-btns">
           <button class="eval-btn${r==="ok"?" sel-ok":""}" onclick="setEval('${it.id}','ok')">✅ できた</button>
           <button class="eval-btn${r==="so"?" sel-so":""}" onclick="setEval('${it.id}','so')">△ まあまあ</button>
           <button class="eval-btn${r==="ng"?" sel-ng":""}" onclick="setEval('${it.id}','ng')">✕ できなかった</button>
-        </div>
-        <div class="slot-form">
+        </div>`;
+      let rec;
+      if(subMode){
+        const per=Math.max(1,Math.round(estMinOf(it)/it.subs.length));
+        rec=it.subs.map(s=>{
+          const sRec=(e.logs||[]).filter(l=>l.date===ds&&l.itemId===it.id&&l.subId===s.id).reduce((a,l)=>a+l.min,0);
+          return `<div class="slot-form">
+            <input type="checkbox" ${s.done?"checked":""} onchange="toggleSub('${it.id}','${s.id}')" style="width:15px;height:15px;flex:none">
+            <span class="st ${s.done?"":""}" style="flex:1;min-width:90px;font-size:13px">${esc(s.title)}</span>
+            <input id="recsub-${it.id}-${s.id}" type="number" min="0" step="1" value="${per}" style="width:56px">分
+            <button class="btn small" onclick="quickLogSub('${it.id}','${s.id}')">記録</button>
+            ${sRec?`<span class="muted" style="font-size:11px">${fmtMin(sRec)}済</span>`:""}
+          </div>`;
+        }).join("");
+      }else{
+        const defMin=planMin||(isRepeat(it)?estMinOf(it):30);
+        rec=`<div class="slot-form">
           <span class="muted">実績</span><input id="rec-min-${it.id}" type="number" min="0" step="1" value="${defMin}" style="width:64px">分
           <input id="rec-note-${it.id}" placeholder="メモ（任意）" style="flex:1;min-width:120px">
           <button class="btn small" onclick="quickLog('${it.id}')">記録</button>
-        </div>
-      </div>`;
+        </div>`;
+      }
+      return `<div class="eval-item">${head}${rate}${rec}</div>`;
     }).join("");
   }
   // 今日のログ一覧（全プロジェクト）
@@ -1059,9 +1109,11 @@ function renderToday(){
       const it=l.itemId&&e.items.find(x=>x.id===l.itemId);
       todays.push({l,it,e});
     }));
-    logEl.innerHTML=todays.length?todays.map(({l,it,e})=>
-      `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${it?esc(it.title):"その他"}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`
-    ).join(""):`<div class="empty">まだ今日の記録はありません</div>`;
+    logEl.innerHTML=todays.length?todays.map(({l,it,e})=>{
+      const sub=it&&l.subId&&Array.isArray(it.subs)?it.subs.find(s=>s.id===l.subId):null;
+      const label=it?(sub?`${esc(it.title)} ＞ ${esc(sub.title)}`:esc(it.title)):"その他";
+      return `<div class="log"><span class="min">${fmtMin(l.min)}</span><span class="lt">${label}</span><span class="muted" style="font-size:11px">${esc(e.name)}</span><span class="note">${esc(l.note||"")}</span><button class="btn danger small" onclick="delLog('${l.id}')">✕</button></div>`;
+    }).join(""):`<div class="empty">まだ今日の記録はありません</div>`;
   }
 }
 window.quickLog=itemId=>{
@@ -1072,6 +1124,15 @@ window.quickLog=itemId=>{
   if(!min&&!note)return alert("時間かメモを入力してください");
   oe.logs=oe.logs||[];
   oe.logs.push({id:uid(),date:today(),itemId,min,note});
+  save();renderAll();
+};
+window.quickLogSub=(itemId,subId)=>{
+  const oe=evForItem(itemId);if(!oe)return;
+  const minEl=$("#recsub-"+itemId+"-"+subId);
+  const min=+(minEl&&minEl.value)||0;
+  if(!min)return alert("時間を入力してください");
+  oe.logs=oe.logs||[];
+  oe.logs.push({id:uid(),date:today(),itemId,subId,min,note:""});
   save();renderAll();
 };
 
